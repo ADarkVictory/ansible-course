@@ -269,6 +269,7 @@ pre.inv { margin-top: 0; padding: 8px 12px; font-size: 13px; }
   margin: 0; padding: 14px;
   background: var(--term-bg); color: var(--term-text); border-color: var(--term-border);
   font-size: 13px; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere; /* wraps like a real terminal: the end of an error line is the part that matters */
 }
 .again { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 0.9rem; }
 .help { margin-top: 12px; }
