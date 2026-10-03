@@ -168,6 +168,10 @@ function parse(src, registry, kw) {
         const task = parseTask(t, tnode, list === 'handlers', registry, kw, err, at, ctx);
         if (task.error) return task;
         [task.line, task.col] = lineCol(src, tnode.pos); // where output.js points a failed task's Origin
+        if (task.rawParams) { // Ansible's "caused by" Origin is the action key
+          const [line, col] = lineCol(src, task.rawParams.pos);
+          task.rawParams = { line, col };
+        }
         play[list].push(task);
       }
     }
@@ -201,7 +205,7 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
   if (cands.length && 'args' in t && extra !== null && !isMap(extra) && !(typeof extra === 'string' && /^\{\{[\s\S]*\}\}$/.test(extra))) {
     return err('The value of the task `args` keyword is invalid.', at(child(tnode, 'args')?.value ?? tnode), 'A mapping or template which resolves to a mapping is required.');
   }
-  let mod, args, raw;
+  let mod, args, raw, key;
   for (const k of cands) {
     const v = t[k];
     if (mod !== undefined) return err(`conflicting action statements: ${mod}, ${k}`, at(tnode));
@@ -214,6 +218,7 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
       [mod, args] = [k, v ?? {}];
     }
     raw = v;
+    key = k;
   }
   if (mod === undefined) return err('no module/action detected in task.', at(tnode));
   const module = mod.includes('.') ? mod : `ansible.builtin.${mod}`;
@@ -236,11 +241,11 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
   if ('_raw_params' in args && !spec.freeform) {
     // A lone "{{ var }}" is the variable params of a mapping, which the simulator cannot see; anything else is rejected before the module runs.
     if (/^\{\{[\s\S]*\}\}$/.test(args._raw_params)) delete args._raw_params;
-    else task.unsupported = `Action '${module}' does not support raw params.`;
+    else task.rawParams = child(tnode, key)?.key ?? tnode; // the action key's node; the caller turns it into { line, col }
   }
   // Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
   // The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
-  if (!task.unsupported) {
+  if (!task.rawParams) {
     const [, names, aliases = ''] = /^(.*?)(?: \((.*)\))?\.$/.exec(spec.supported);
     const legal = new Set([...spec.params, ...Object.keys(spec.aliases), ...`${names}, ${aliases}`.split(', ')]);
     const bad = Object.keys(args).filter((k) => !legal.has(k)).sort();

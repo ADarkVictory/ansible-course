@@ -82,11 +82,16 @@ export function render(plays, inventory, { second = false, source = '' } = {}) {
     const exec = (task, kind) => {
       const label = (h) => (task.keywords.delegate_to ? `${h} -> ${task.keywords.delegate_to}` : h);
       out += banner(`${kind} [${tpl(task.name, varsFor(hosts[0], task)) || task.action}]`);
-      if (task.unsupported) {
-        // Golden: unsupported-param. The [ERROR] block shows once, then a fatal line per host.
-        out += format(`Task failed: Module failed: ${task.unsupported}`, excerpt(source, task.line, task.col));
+      // Golden: unsupported-param, raw-params. The [ERROR] block shows once, then a fatal line per host.
+      const raw = task.rawParams && `Action '${task.module}' does not support raw params.`;
+      if (task.unsupported || raw) {
+        const msg = raw ? `Task failed: ${raw}` : task.unsupported;
+        out += raw
+          // Ansible wraps this one (raised while preparing the task) as "Task failed." caused by the error at the action key.
+          ? format(msg, `\nTask failed.\n${excerpt(source, task.line, task.col)}\n\n<<< caused by >>>\n\n${raw}\n${excerpt(source, task.rawParams.line, task.rawParams.col)}`)
+          : format(`Task failed: Module failed: ${msg}`, excerpt(source, task.line, task.col));
         for (const h of hosts) {
-          out += `fatal: [${label(h)}]: FAILED! => {"changed": false, "msg": ${JSON.stringify(task.unsupported)}}\n`;
+          out += `fatal: [${label(h)}]: FAILED! => {"changed": false, "msg": ${JSON.stringify(msg)}}\n`;
           stats[h].failed = 1;
         }
         return 'failed';

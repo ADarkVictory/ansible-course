@@ -25,6 +25,8 @@ for (const [name, n, opts] of [
   ['run-sample: second run (idempotent modules ok, command still changed, no handler)', 'run-sample', { second: true }],
   ['run-no-facts: no Gathering Facts', 'run-no-facts', {}],
   ['unsupported-param: [ERROR] block with Origin and excerpt, fatal per host, failed=1', 'unsupported-param', {}],
+  ['raw-params: bare text on a module that takes none fails as Ansible prints it (caused-by block)', 'raw-params', {}],
+  ['missing-handler: notify naming no handler stops the run with the real [ERROR]', 'missing-handler', {}],
   ['run-idempotency: unnamed tasks, creates (both forms), changed_when, pre_tasks flush, debug msg/var', 'run-idempotency', {}],
   ['run-idempotency: second run (creates/changed_when ok; still-changed command fires its handler)', 'run-idempotency', { second: true }],
 ]) {

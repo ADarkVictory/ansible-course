@@ -230,8 +230,8 @@ test('free-form command keeps unknown k=v text as the command; shell accepts its
 
 test('bare text on a module that takes none is rejected by Ansible before it runs', () => {
   const t = tasksOf(play('  tasks:', '    - ansible.builtin.dnf: nginx', '    - file: /tmp/x'));
-  assert.equal(t[0].unsupported, "Action 'ansible.builtin.dnf' does not support raw params.");
-  assert.equal(t[1].unsupported, "Action 'ansible.builtin.file' does not support raw params.");
+  assert.deepEqual([t[0].rawParams, t[1].rawParams], [{ line: 4, col: 7 }, { line: 5, col: 7 }]);
+  assert.deepEqual([t[0].unsupported, t[1].unsupported], [undefined, undefined]);
   assert.equal(check(one([]), play('  tasks:', '    - ansible.builtin.dnf: nginx')).ok, false);
   // a lone template is a mapping Ansible only sees at run time
   const tpl = tasksOf(play('  tasks:', '    - ansible.builtin.dnf: "{{ pkg_args }}"'))[0];
@@ -298,4 +298,12 @@ test('action: string form parses its k=v too, and its unbalanced quotes name the
   // real 2.21.4: "...unbalanced jinja2 block or quotes: debug msg=\"hello world" (the action string, module name included)
   const r = parsePlaybook(play('  tasks:', '    - action: debug msg="hello world'), registry, keywords);
   assert.match(r.error, /^\[ERROR\]: Error loading tasks: failed at splitting arguments, either an unbalanced jinja2 block or quotes: debug msg="hello world\n/);
+});
+
+test('checkWrite shows the real Ansible output for a raw-params task and for a notify naming no handler', () => {
+  for (const n of ['raw-params', 'missing-handler']) {
+    const r = check(one([{ task: { module: 'ping' }, hint: 'unused' }], { inventory: handlers1.inventory }), read(`../tools/fixtures/${n}.yml`));
+    assert.deepEqual([r.ok, r.hint, r.failedCheck], [false, undefined, undefined], n);
+    assert.equal(r.output, read(`./golden/${n}.txt`), n);
+  }
 });

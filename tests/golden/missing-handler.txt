@@ -1,0 +1,5 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Deploy config] ***********************************************************
+[ERROR]: The requested handler 'Restart nginxx' was not found in either the main handlers list nor in the listening handlers list
