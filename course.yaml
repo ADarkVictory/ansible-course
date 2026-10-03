@@ -4,3 +4,5 @@ modules:
     lessons:
       - file: 01-what-is-ansible
         title: What is Ansible?
+      - file: 02-inventories
+        title: Inventories
