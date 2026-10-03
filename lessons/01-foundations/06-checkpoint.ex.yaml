@@ -8,12 +8,12 @@
     - text: Every host reports `CHANGED`, because the line installs chrony again on each of them
       correct: false
       why: "That is what `shell: dnf install -y chrony` would report. The dnf module checks which packages are installed and changes nothing where chrony is already there. Revisit lesson 5, Use a module, not shell."
-    - text: "`web2` reports `SUCCESS`, because it fetched the change from the control node when it booted"
+    - text: "`web2` is left out again: a host that was `UNREACHABLE!` is reached only with `--limit web2`"
       correct: false
-      why: Nothing on `web2` fetches anything. Ansible has no agent and pushes each run, so `web2` gets chrony only now. Revisit lesson 1, Push, not pull.
-    - text: Only `web2` is contacted, because Ansible skips the hosts that succeeded last night
+      why: "`UNREACHABLE!` drops a host for the rest of that run only. Every new run starts again from the inventory and the pattern, so the same line reaches `web2`, now up, and installs chrony there. Revisit lesson 1, Push, not pull."
+    - text: "`web2` reports `CHANGED`; every other host reports `FAILED!`, because chrony is already installed there"
       correct: false
-      why: Ansible keeps no record of earlier runs. It connects to every host the pattern matches and checks each one's real state. Revisit lesson 1, Idempotency.
+      why: "`state=present` declares a result, and on those hosts it is already true. The dnf module checks, finds chrony, and succeeds with `\"changed\": false`. Revisit lesson 5, Use a module, not shell."
 
 - id: checkpoint-2
   type: choice
@@ -28,13 +28,13 @@
     - text: "`deploy`, because `ansible.cfg` settings apply only to playbooks"
       correct: false
       why: Every Ansible command reads `ansible.cfg`; lesson 4's commands needed no `-i` because the inventory was set there. Revisit lesson 3, A project ansible.cfg.
-    - text: "`deploy`, because `become` belongs under `[defaults]`, so this file never turns it on"
+    - text: "`deploy`, because `remote_user` overrides `become_user`"
       correct: false
-      why: "`become` belongs under `[privilege_escalation]`, where this file has it. Under `[defaults]` it would be ignored without a warning. Revisit lesson 3, Privilege escalation: become."
+      why: "They do not compete. `remote_user` is who logs in; `become_user` is who the task then runs as, through sudo. Revisit lesson 3, Privilege escalation: become."
 
 - id: checkpoint-3
   type: choice
-  question: "A colleague wrote this inventory, and `ansible-inventory --graph` printed no warning. To restart the app in production without touching the databases, she ran `ansible 'prod:!db' -b -m systemd_service -a 'name=app state=restarted'`. Which hosts restarted the app?"
+  question: "A colleague wrote this inventory, and `ansible-inventory --graph` printed no warning. To restart the app in production without touching the databases, she ran `ansible 'prod:!db' -b -m systemd_service -a 'name=app state=restarted'`. Which hosts did the command run on?"
   code: |
     all:
       children:
@@ -55,7 +55,7 @@
       why: "`db1:` and `db2:` sit directly under `db:`, without `hosts:`. Ansible skips them without a warning, so `db` is an empty group and `!db` removes nothing; `--graph` showed `@db:` with no hosts. Revisit lesson 2, When Ansible cannot read the file."
     - text: "`web1` and `db1`"
       correct: true
-      why: "`db` holds no hosts, because `db1:` and `db2:` need a `hosts:` key above them. `prod` lists `web1` and `db1`, and `!db` takes nothing away. `--list-hosts` on the same line would have shown `db1` before anything restarted."
+      why: "`db` holds no hosts, because `db1:` and `db2:` need a `hosts:` key above them. `prod` lists `web1` and `db1`, and `!db` takes nothing away. `--list-hosts` on the same line would have shown `db1` before anything ran."
     - text: None, because Ansible refuses a pattern that names an empty group
       correct: false
       why: An empty group is a valid group that matches no hosts. Ansible ran on what the pattern left, `web1` and `db1`. Revisit lesson 4, Host patterns.
@@ -67,9 +67,9 @@
   type: choice
   question: "Same commit, same command, both run from the repository root. On your laptop, `ansible 'web:&prod' --list-hosts` lists `web1` and `web2`; in the CI job it lists `web7`. The project's `ansible.cfg` sets `inventory = inventory.ini`. What is the likely cause?"
   options:
-    - text: The CI runner's `~/.ansible.cfg` names another inventory, and it is read after the project file
+    - text: "`--list-hosts` ignores `ansible.cfg` and reads `/etc/ansible/hosts`, which differs on the CI runner"
       correct: false
-      why: Ansible reads only the first config file it finds, here `./ansible.cfg`. No other file is read after it or merged in. Revisit lesson 3, Which file wins.
+      why: "`--list-hosts` reads the same inventory a real run would, here `inventory` from `ansible.cfg`. `/etc/ansible/hosts` is only the fallback when nothing names an inventory. Revisit lesson 3, inventory, remote_user, forks."
     - text: Patterns match the address in `ansible_host`, and the CI runner resolves those addresses differently
       correct: false
       why: "Patterns match inventory names. `ansible_host` is only the address SSH connects to, and `--list-hosts` connects to nothing. Revisit lesson 2, Host variables inline."
