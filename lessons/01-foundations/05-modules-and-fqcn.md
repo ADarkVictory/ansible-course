@@ -20,12 +20,14 @@ A **collection** is a package of modules and other plugins, installed and versio
 
 ## Short names are ambiguous
 
-`dnf:` is a short name. Ansible looks it up as `ansible.legacy.dnf`, not `ansible.builtin.dnf`:
+`ping:` is a short name. Ansible looks it up as `ansible.legacy.ping`, not `ansible.builtin.ping`:
 
 - a module of that name in a `library/` directory next to the playbook, or in another configured module path, comes first
 - only then the built-in module
 
-That is why some error messages name `ansible.legacy.dnf`. A colleague's `library/dnf.py` silently replaces the real module for every `dnf:` task, and the playbook gives no sign of it.
+A colleague's `library/ping.py` silently replaces the real module for every `ping:` task, and the playbook gives no sign of it. `ansible.builtin.ping:` still runs the real one.
+
+Never name your own modules after built-in ones. A few built-ins, such as `dnf`, hand the work to `ansible.legacy.dnf` themselves, so a `library/dnf.py` replaces even `ansible.builtin.dnf`. That is also why dnf's error messages name `ansible.legacy.dnf`, however you spell the task.
 
 Some short names point outside ansible-core: `firewalld` redirects to `ansible.posix.firewalld`. With ansible-core alone, a playbook with a `firewalld:` task stops with `couldn't resolve module/action 'firewalld'`. With the `ansible` package, which bundles many collections, the same task runs `ansible.posix.firewalld`. The meaning depends on what is installed.
 

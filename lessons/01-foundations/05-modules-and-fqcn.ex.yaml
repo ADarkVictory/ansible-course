@@ -1,19 +1,19 @@
 - id: modules-and-fqcn-1
   type: choice
-  question: "Your project has a `library/` directory, next to the playbook, holding `dnf.py`, a module a colleague wrote. A task in the playbook uses `dnf:`. Which module runs?"
+  question: "Your project has a `library/` directory, next to the playbook, holding `ping.py`, a module a colleague wrote. A task in the playbook uses `ping:`. Which module runs?"
   options:
-    - text: "`ansible.builtin.dnf`, because a short name means `ansible.builtin`"
+    - text: "`ansible.builtin.ping`, because a short name means `ansible.builtin`"
       correct: false
-      why: "A short name is looked up as `ansible.legacy.dnf`. That usually ends at the built-in module, but `library/` next to the playbook is searched first."
-    - text: Your colleague's `library/dnf.py`
+      why: "A short name is looked up as `ansible.legacy.ping`. That usually ends at the built-in module, but `library/` next to the playbook is searched first."
+    - text: Your colleague's `library/ping.py`
       correct: true
-      why: "`dnf:` is looked up as `ansible.legacy.dnf`, and `library/` comes before the built-in module. Writing `ansible.builtin.dnf` would run the real one."
+      why: "`ping:` is looked up as `ansible.legacy.ping`, and `library/` comes before the built-in module. Writing `ansible.builtin.ping` would run the real one."
     - text: Neither, because Ansible stops when two modules share a name
       correct: false
       why: Ansible takes the first match and says nothing. That silence is why ansible-lint's production profile wants an FQCN on every task.
-    - text: "`ansible.builtin.dnf`, because ansible-lint rejects the short name"
+    - text: "`ansible.builtin.ping`, because ansible-lint rejects the short name"
       correct: false
-      why: ansible-lint only reads the playbook and reports; it never changes what runs. At run time, `dnf:` still finds `library/dnf.py` first.
+      why: ansible-lint only reads the playbook and reports; it never changes what runs. At run time, `ping:` still finds `library/ping.py` first.
 
 - id: modules-and-fqcn-2
   type: command
@@ -181,6 +181,16 @@
                 name: nginx
                 state: removed
       fails: 6
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.dnf:
+                name: nginx
+                state: install
+      fails: error
 
 - id: modules-and-fqcn-5
   type: choice
