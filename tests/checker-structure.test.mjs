@@ -155,3 +155,11 @@ test('odd input never throws', () => {
     assert.ok(typeof r.error === 'string' || Array.isArray(r.plays), JSON.stringify(src));
   }
 });
+
+test('a real module the course does not simulate: a hint, no invented error; a redirect alias resolves; a typo keeps the real error', () => {
+  const pb = (m) => `- hosts: web\n  tasks:\n    - ${m}:\n        path: /tmp/x\n`;
+  assert.deepEqual(parse(pb('stat')), { error: '', hint: "This course doesn't simulate stat yet." });
+  assert.deepEqual(parse(pb('ansible.builtin.raw')), { error: '', hint: "This course doesn't simulate ansible.builtin.raw yet." });
+  assert.equal(parse(`- hosts: web\n  tasks:\n    - systemd:\n        name: nginx\n`).plays[0].tasks[0].module, 'ansible.builtin.systemd_service');
+  assert.match(parse(pb('stta')).error, /^\[ERROR\]: couldn't resolve module\/action 'stta'/);
+});

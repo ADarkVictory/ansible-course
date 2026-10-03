@@ -81,6 +81,28 @@ test('real ad-hoc failures: unsupported parameter (short and FQCN), raw params, 
   }
 });
 
+test('a .yml pattern with no -a: the real hint about ansible-playbook (.yaml does not get it)', () => {
+  assert.equal(run('ansible playbook.yml').output, golden('adhoc-yml-pattern'));
+  assert.match(golden('adhoc-yml-pattern'), /module \(did you mean to run ansible-playbook\?\)\n$/);
+  const yaml = run('ansible site.yaml').output;
+  assert.match(yaml, /No argument passed to command module\n$/);
+});
+
+test('a real module the course does not simulate: a hint and no invented error; typos still get the real error', () => {
+  for (const m of ['stat', 'raw', 'ansible.builtin.stat', 'ansible.legacy.ping', 'ansible.legacy.stat']) {
+    const r = run(`ansible web -m ${m} -a x=1`, {}, [{ module: 'ping', hint: 'h' }]);
+    assert.deepEqual(r, { ok: false, output: '', hint: `This course doesn't simulate ${m} yet.` }, m);
+  }
+  assert.match(run('ansible web -m stta').output, /^\[ERROR\]: Task failed: Cannot resolve 'stta'/);
+});
+
+test('a redirect alias resolves to the simulated module (systemd is systemd_service); the error names it as typed', () => {
+  const c = parseCommand('ansible web -m systemd -a "name=nginx state=started"', registry);
+  assert.equal(c.module, 'ansible.builtin.systemd_service');
+  assert.equal(run('ansible web -m systemd -a "name=nginx"', {}, [{ module: 'systemd_service', args: { name: 'nginx' } }]).ok, true);
+  assert.equal(run("ansible web -m systemd -a 'name=x bogus=1'").output, golden('adhoc-unsupported-param-redirect'));
+});
+
 test('command and shell results use the exercise stdout; empty stdout prints a blank line', () => {
   assert.equal(run('ansible web -m command -a "echo hello"', { stdout: 'hello' }).output, golden('adhoc-command'));
   assert.equal(run('ansible web -m shell -a "echo hi; echo there"', { stdout: 'hi\nthere\n' }).output, golden('adhoc-shell'));
@@ -142,6 +164,9 @@ test('input mistakes give a hint and no invented Ansible output', () => {
     ['ansible web -m ‘ping’', /curly quotes; use straight quotes/],
     ['ansible -m ping', /host pattern/],
     ['ansible web db -m ping', /one host pattern/],
+    ['ansible web -m ping \u2014become', /into a dash; type two hyphens/],
+    ['ansible web -m ping \u2013b', /into a dash; type two hyphens/],
+    ['ansible web \u2014list-hosts', /into a dash; type two hyphens/],
     ['ansible web -m ping --bogus', /--bogus/],
     ['ansible web -m ping -x', /-x/],
     ['ansible web -m', /-m needs a value/],
@@ -154,6 +179,10 @@ test('input mistakes give a hint and no invented Ansible output', () => {
     assert.equal(r.output, '', line);
     assert.match(r.hint, hint, line);
   }
+});
+
+test('a dash inside a quoted value is just text', () => {
+  assert.equal(run('ansible web -m ping -a \'data="a \u2013 b"\'').ok, true);
 });
 
 test('an unknown key in a check is a content bug, not a silent pass', () => {

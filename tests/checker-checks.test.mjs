@@ -307,3 +307,8 @@ test('checkWrite shows the real Ansible output for a raw-params task and for a n
     assert.equal(r.output, read(`./golden/${n}.txt`), n);
   }
 });
+
+test('a task using a real module the course does not simulate fails with the hint and no output', () => {
+  const r = check(one([{ task: { module: 'file' }, hint: 'h' }]), play('  tasks:', '    - ansible.builtin.stat:', '        path: /tmp/x'));
+  assert.deepEqual(r, { ok: false, output: '', hint: "This course doesn't simulate ansible.builtin.stat yet." });
+});

@@ -202,7 +202,9 @@ export function renderAdhoc(cmd, inventory, { stdout = '' } = {}) {
   }
   if (!hosts.length) out += '[WARNING]: No hosts matched, nothing to do\n';
   if (cmd.flags['list-hosts']) return `${out}  hosts (${hosts.length}):\n${hosts.map((h) => `    ${h}\n`).join('')}`;
-  if (cmd.noArg) return `${out}[ERROR]: No argument passed to ${cmd.mod} module\n`;
+  if (cmd.noArg) { // adhoc.py: a pattern ending in .yml is probably a playbook
+    return `${out}[ERROR]: No argument passed to ${cmd.mod} module${cmd.pattern.endsWith('.yml') ? ' (did you mean to run ansible-playbook?)' : ''}\n`;
+  }
   if (!hosts.length) return out;
 
   const { mod } = cmd;

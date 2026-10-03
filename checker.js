@@ -6,6 +6,7 @@ import { render, renderAdhoc } from './output.js'; // output.js imports format/e
 const PATH = '/home/student/playbook.yml';
 const TAB_HINT = 'Replace tabs with spaces.';
 const CURLY_HINT = 'Your keyboard inserted curly quotes; use straight quotes.';
+const DASH_HINT = 'Your keyboard turned -- into a dash; type two hyphens.';
 const TASK_LISTS = new Set(['handlers', 'pre_tasks', 'post_tasks', 'tasks']);
 // YAML 1.1 as PyYAML (and so Ansible) resolves it: js-yaml's YAML 1.1 also reads y/n as booleans and 0-led "05:30" as base-60 ints.
 const SCHEMA = yaml.YAML11_SCHEMA.withTags(
@@ -44,7 +45,7 @@ const CURLY = /[“”‘’]/;
 export function checkWrite(exercise, source, registry, keywords, opts = {}) {
   const parsed = parsePlaybook(source, registry, keywords);
   const fail = (output, hint, failedCheck) => ({ ok: false, output, ...(hint && { hint }), ...(failedCheck && { failedCheck }) });
-  if (parsed.error) return fail(parsed.error, parsed.hint);
+  if ('error' in parsed) return fail(parsed.error, parsed.hint);
   const { plays } = parsed;
   // YAML takes curly quotes as literal text, so only a value that Ansible would act on makes the answer wrong; a name or comment is fine.
   if (parsed.hint && plays.some(({ name, pre_tasks, tasks, post_tasks, handlers, ...play }) =>
@@ -187,13 +188,14 @@ export function parseCommand(line, registry) {
   const words = shellWords(String(line));
   if (!words) return { hint: 'Close the quote you opened.' };
   if (!words.length) return { hint: 'Type a command.' };
+  if (words.some((w) => /^[\u2013\u2014]/.test(w))) return { hint: DASH_HINT }; // iOS Smart Punctuation: -- becomes an em dash, - an en dash
   const [program, ...argv] = words;
   if (program !== 'ansible') return { program, hint: `"${program}" is not part of this exercise; use the ansible command.` };
   const { flags, pos, error } = parseArgv(argv);
   if (error) return { program, hint: error };
   const { 'module-name': mod = 'command', args: text = '', ...rest } = flags;
-  const module = mod.includes('.') ? mod : `ansible.builtin.${mod}`;
-  const spec = registry[module];
+  const { module, spec, real } = lookup(mod, registry);
+  if (real && !spec) return { program, hint: notSimulated(mod) };
   let typed = {};
   if (text) {
     let json;
@@ -206,7 +208,7 @@ export function parseCommand(line, registry) {
     program, pattern: pos[0], module, args: spec ? normalise(spec, { ...typed }) : { ...typed }, flags: rest,
     mod, known: Boolean(spec), typedArgs: typed, rawParams,
     noArg: !text && (module === 'ansible.builtin.command' || module === 'ansible.builtin.shell'),
-    unsupported: spec && !rawParams ? unsupportedMsg(spec, mod, typed) : undefined,
+    unsupported: spec && !rawParams ? unsupportedMsg(spec, mod, typed, module !== fqcn(mod)) : undefined,
   };
 }
 
@@ -311,7 +313,7 @@ function parse(src, registry, kw) {
         }
         // ponytail: block/rescue/always arrive with module 5; until then a block is an unresolved action 'block'.
         const task = parseTask(t, tnode, list === 'handlers', registry, kw, err, at, ctx);
-        if (task.error) return task;
+        if ('error' in task) return task;
         [task.line, task.col] = lineCol(src, tnode.pos); // where output.js points a failed task's Origin
         if (task.rawParams) { // Ansible's "caused by" Origin is the action key
           const [line, col] = lineCol(src, task.rawParams.pos);
@@ -366,8 +368,8 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
     key = k;
   }
   if (mod === undefined) return err('no module/action detected in task.', at(tnode));
-  const module = mod.includes('.') ? mod : `ansible.builtin.${mod}`;
-  const spec = registry[module];
+  const { module, spec, real } = lookup(mod, registry);
+  if (real && !spec) return { error: '', hint: notSimulated(mod) };
   if (!spec) return err(`couldn't resolve module/action '${mod}'. This often indicates a misspelling, missing collection, or incorrect module path.`, at(tnode));
 
   if ('vars' in t && t.vars !== null && !isMap(t.vars)) {
@@ -388,7 +390,7 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
     if (/^\{\{[\s\S]*\}\}$/.test(args._raw_params)) delete args._raw_params;
     else task.rawParams = child(tnode, key)?.key ?? tnode; // the action key's node; the caller turns it into { line, col }
   }
-  const bad = !task.rawParams && unsupportedMsg(spec, mod, args);
+  const bad = !task.rawParams && unsupportedMsg(spec, mod, args, module !== fqcn(mod));
   if (bad) task.unsupported = bad;
   normalise(spec, args);
   return task;
@@ -396,12 +398,24 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
 
 // Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
 // The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
-function unsupportedMsg(spec, mod, args) {
+function unsupportedMsg(spec, mod, args, redirected) {
   const [, names, aliases = ''] = /^(.*?)(?: \((.*)\))?\.$/.exec(spec.supported);
   const legal = new Set([...spec.params, ...Object.keys(spec.aliases), ...`${names}, ${aliases}`.split(', ')]);
   const bad = Object.keys(args).filter((k) => !legal.has(k)).sort();
-  const ran = spec.reports_as[mod.includes('.') ? 'fqcn' : 'short'];
+  const ran = redirected ? mod : spec.reports_as[mod.includes('.') ? 'fqcn' : 'short']; // a redirect alias runs under the name typed
   if (bad.length) return `Unsupported parameters for (${ran}) module: ${bad.join(', ')}. Supported parameters include: ${spec.supported}`;
+}
+
+const fqcn = (name) => name.includes('.') ? name : `ansible.builtin.${name}`;
+const notSimulated = (mod) => `This course doesn't simulate ${mod} yet.`;
+
+// A module name as real Ansible resolves it (modules.yaml: `known` lists every real ansible.builtin module, `redirects` the aliases of
+// simulated ones). module/spec: the simulated module it runs; real: Ansible resolves the name even when the course has no spec for it,
+// so only a name with real === false gets Ansible's "couldn't resolve" error.
+function lookup(name, registry) {
+  const fq = fqcn(name);
+  const module = registry.redirects?.[fq] ?? fq;
+  return { module, spec: registry[module], real: Boolean(registry[module]) || Boolean(registry.known?.includes(fq.replace(/^ansible\.(builtin|legacy)\./, ''))) };
 }
 
 // Aliases are accepted by Ansible; checks compare canonical names.

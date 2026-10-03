@@ -54,6 +54,8 @@ adhoc adhoc-raw-params web -m ping -a hello
 adhoc adhoc-no-hosts nosuch -m ping
 adhoc adhoc-no-command-arg web
 adhoc adhoc-no-hosts-no-arg nosuch -m shell
+adhoc adhoc-yml-pattern playbook.yml
+adhoc adhoc-unsupported-param-redirect web -m systemd -a 'name=x bogus=1'
 adhoc adhoc-limit 'web:db' -m ping --limit prod
 adhoc adhoc-limit-empty web -m ping --limit db
 adhoc adhoc-limit-unmatched nosuch -m ping --limit nosuch

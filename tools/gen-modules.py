@@ -57,6 +57,19 @@ for m in MODULES:
 # they accept those modules' aliases too: `package: pkg=nginx` is `name`. Checks compare canonical names.
 for m, backend in {"package": "dnf", "service": "systemd_service"}.items():
     out["ansible.builtin." + m]["aliases"] |= out["ansible.builtin." + backend]["aliases"]
+# Every real ansible.builtin module (short names), so a module the course does not simulate yet is told apart from a typo.
+# `redirects`: real names whose module file is byte-identical to a simulated module's (systemd is systemd_service); they resolve to it.
+import ansible.modules
+listed = json.loads(subprocess.check_output([doc, "-l", "-t", "module", "--json", "ansible.builtin"], text=True))
+known = sorted(n.removeprefix("ansible.builtin.") for n in listed)
+module_dir = Path(ansible.modules.__path__[0])
+redirects = {}
+for n in known:
+    for m in MODULES:
+        if n != m and (module_dir / f"{n}.py").read_bytes() == (module_dir / f"{m}.py").read_bytes():
+            redirects["ansible.builtin." + n] = "ansible.builtin." + m
+out["known"] = known
+out["redirects"] = redirects
 (root / "modules.yaml").write_text(yaml.safe_dump(out, sort_keys=False, width=1000))
 
 # Keyword sets, read from the real classes (2.21.4), not from memory. Written to keywords.yaml.
