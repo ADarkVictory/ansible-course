@@ -78,7 +78,7 @@ Short paragraphs, H2 sections, one idea per section, code blocks for YAML and co
 
 Each `.ex.yaml` is a list. Common keys: `id`, `type` (`choice`, `write` or `command`).
 
-**`choice`**: `question`, `options` (`text`, `why`, `correct`). Exactly one `correct: true`. Every `why` teaches: wrong options name the misconception, the right one says why. Distractors are plausible mistakes.
+**`choice`**: `question`, optional `code` (shown as a code block), `options` (`text`, `why`, `correct`). Exactly one `correct: true`. Every `why` teaches: wrong options name the misconception, the right one says why. Distractors are plausible mistakes.
 
 **`write`**: the learner writes a playbook.
 - `task`, `starter`, `solution`, `inventory` (`{ group: [hosts] }`, the hosts the simulated run uses)
