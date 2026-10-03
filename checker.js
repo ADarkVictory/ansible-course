@@ -484,6 +484,7 @@ export function parseInventory(source) {
         if ([...direct].some((g) => g !== 'all' && g !== 'ungrouped')) { ungrouped.hosts.splice(ungrouped.hosts.indexOf(host), 1); direct.delete('ungrouped'); }
       } else if ([...direct].every((g) => g === 'all')) addChild('ungrouped', host);
     }
+    // Real Ansible warns in a Python set's order (hash-seeded, it varies per run); file order is one of the orders it prints.
     for (const name of groups.keys()) if (hosts.has(name)) warn(`Found both group and host with same name: ${name}`);
   };
   const failed = (plugin, msg, detail) =>

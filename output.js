@@ -20,15 +20,18 @@ const LOCALHOST = ['localhost', '127.0.0.1', '::1'];
 /**
  * Hosts a pattern selects, as ansible's inventory manager does (list order, never sorted).
  * @param patterns  a pattern string or an array of them (a play's `hosts:`); each is split on `,`, or else on `:`
- * @param inventory { group: [host, ...] }
+ * @param inventory { group: [host, ...], 'group:children': [group, ...] } (a `:children` key lists child groups, as in INI)
  * @returns { hosts, unmatched } unmatched: names that are neither a group nor a host (real Ansible warns once per name, per run)
  * Patterns: plain host or group names, `all`, `*`/`?` globs, `a:b` union, `a:&b` intersection, `a:!b` exclusion.
  * Evaluation order is Ansible's: plain patterns, then every `&`, then every `!`; with no plain pattern it starts from `all`.
- * ponytail: `web[0]` subscripts, `~regex` patterns and nested groups are not resolved.
+ * ponytail: `web[0]` subscripts and `~regex` patterns are not resolved. A group lists its own hosts, then its children's in
+ * order; real Ansible orders grandchildren by set iteration, so deeper nesting may list in another order.
  */
 export function resolveHosts(patterns, inventory) {
-  const everyone = [...new Set(Object.values(inventory).flat())];
-  const groups = { all: everyone, ungrouped: [], ...inventory };
+  const hostsOf = (g) => [...new Set([...(inventory[g] ?? []), ...(inventory[`${g}:children`] ?? []).flatMap(hostsOf)])];
+  const names = [...new Set(Object.keys(inventory).map((k) => k.replace(/:children$/, '')))];
+  const everyone = [...new Set(names.flatMap((g) => inventory[g] ?? []))];
+  const groups = { all: everyone, ungrouped: [], ...Object.fromEntries(names.map((g) => [g, hostsOf(g)])) };
   groups.all = everyone;
   const list = [patterns].flat().flatMap((p) => String(p).split(String(p).includes(',') ? /\s*,\s*/ : /\s*:\s*/)).map((p) => p.trim()).filter(Boolean);
   const kind = (p) => (p[0] === '!' ? 2 : p[0] === '&' ? 1 : 0);

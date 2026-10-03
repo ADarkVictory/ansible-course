@@ -7,6 +7,7 @@
 #   ansible <args> -i tools/fixtures/inventory-multi.ini                          (adhoc-*, see the adhoc calls below)
 #   ansible <args> -i tools/fixtures/inventory-adhoc.ini -c local                 (adhoc-lesson-*, see the lesson calls below)
 #   list-hosts.json: ansible <pattern> --list-hosts over inventory-multi.ini      (tools/gen-hosts.py)
+#   list-hosts-checkpoint.json: the same over inventory-checkpoint.ini (nested groups)
 #   ansible-inventory -i inventory.yml --graph                                    (inv-*: the fixture as /home/student/inventory.yml)
 #   ansible-inventory -i inventory.ini --graph                                    (inventory-lesson: the INI fixture)
 #   ansible --version, ansible-config dump --only-changed with ansible.cfg        (cfg-*: tools/fixtures/ansible-cfg.ini)
@@ -112,5 +113,8 @@ mkdir -p /home/student/shared && chmod 0777 /home/student/shared && cp /home/stu
 (cd /home/student/shared && ansible --version 2>&1 > /dev/null < /dev/null) > "$out/cfg-world-writable.txt"
 rm -rf /home/student/shared /home/student/ansible.cfg
 "$bin/python" "$root/tools/gen-hosts.py" "$invm" > "$out/list-hosts.json"
+# Module 1 checkpoint: groups by role and environment, nonprod a group of groups ([nonprod:children]).
+"$bin/python" "$root/tools/gen-hosts.py" "$root/tools/fixtures/inventory-checkpoint.ini" all nonprod 'web:&nonprod' 'nonprod:&web' \
+  'web:!prod' 'web:nonprod' 'nonprod:!db' 'web:&staging' 'db:&nonprod' 'staging:dev' 'non*' '!prod' > "$out/list-hosts-checkpoint.json"
 "$bin/python" "$root/tools/gen-kv.py" > "$out/kv.json"
 exit 0

@@ -1,0 +1,50 @@
+[
+ {
+  "pattern": "all",
+  "output": "  hosts (6):\n    web1\n    web2\n    web3\n    dev1\n    db1\n    db2\n"
+ },
+ {
+  "pattern": "nonprod",
+  "output": "  hosts (3):\n    web3\n    db2\n    dev1\n"
+ },
+ {
+  "pattern": "web:&nonprod",
+  "output": "  hosts (2):\n    web3\n    dev1\n"
+ },
+ {
+  "pattern": "nonprod:&web",
+  "output": "  hosts (2):\n    web3\n    dev1\n"
+ },
+ {
+  "pattern": "web:!prod",
+  "output": "  hosts (2):\n    web3\n    dev1\n"
+ },
+ {
+  "pattern": "web:nonprod",
+  "output": "  hosts (5):\n    web1\n    web2\n    web3\n    dev1\n    db2\n"
+ },
+ {
+  "pattern": "nonprod:!db",
+  "output": "  hosts (1):\n    web3\n"
+ },
+ {
+  "pattern": "web:&staging",
+  "output": "  hosts (1):\n    web3\n"
+ },
+ {
+  "pattern": "db:&nonprod",
+  "output": "  hosts (2):\n    db2\n    dev1\n"
+ },
+ {
+  "pattern": "staging:dev",
+  "output": "  hosts (3):\n    web3\n    db2\n    dev1\n"
+ },
+ {
+  "pattern": "non*",
+  "output": "  hosts (3):\n    web3\n    db2\n    dev1\n"
+ },
+ {
+  "pattern": "!prod",
+  "output": "  hosts (3):\n    web3\n    dev1\n    db2\n"
+ }
+]

@@ -147,6 +147,14 @@ test('--list-hosts prints what real ansible lists, for every pattern captured fr
   }
 });
 
+test('a `<group>:children` key makes a group of groups, as [group:children] does in INI; list order is the real one', () => {
+  const nested = { web: ['web1', 'web2', 'web3', 'dev1'], db: ['db1', 'db2', 'dev1'], prod: ['web1', 'web2', 'db1'], staging: ['web3', 'db2'],
+    dev: ['dev1'], 'nonprod:children': ['staging', 'dev'] }; // tools/fixtures/inventory-checkpoint.ini
+  for (const { pattern, output } of JSON.parse(read('./golden/list-hosts-checkpoint.json'))) {
+    assert.equal(renderAdhoc(parseCommand(`ansible '${pattern}' --list-hosts`, registry), nested), output, pattern);
+  }
+});
+
 test('renderAdhoc takes parseCommand(...) and the inventory', () => {
   assert.equal(renderAdhoc(parseCommand('ansible web -m ping', registry), web), golden('adhoc-ping'));
 });

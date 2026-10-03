@@ -1,7 +1,8 @@
 # Prints tests/golden/list-hosts.json: what `ansible <pattern> --list-hosts` prints (stdout and stderr together) over
-# the inventory file in argv[1]. output.js's host-pattern resolver must agree. Run by capture.sh.
+# the inventory file in argv[1], for the patterns in argv[2:] (default: the list below). output.js's host-pattern resolver
+# must agree. Run by capture.sh.
 import json, subprocess, sys
-patterns = [
+patterns = sys.argv[2:] or [
  'all', '*', 'web', 'web:&prod', 'web:!db', 'web1:web2', 'web2:web1', 'db:web', 'prod:!web1', 'web,db', 'prod:&web:!staging',
  'db1', 'nosuch', 'web:nosuch', 'web:&nosuch', 'nosuch:web', '!db', '&prod', 'web:!prod', 'db:web1:web', 'prod:staging',
  'ungrouped', 'localhost', 'web1,nosuch', 'web:!nosuch', 'web1:&web', 'web:&prod:&db', 'all:!web1', '*:!db', 'web,db:!db1',
