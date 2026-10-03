@@ -1,0 +1,2 @@
+ansible [core 2.21.4]
+  config file = /home/student/ansible.cfg

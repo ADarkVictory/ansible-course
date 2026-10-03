@@ -1,0 +1,101 @@
+- id: ansible-cfg-1
+  type: choice
+  question: Your test VMs are destroyed and rebuilt every night, each with a new SSH host key. The next run cannot connect to them because SSH stops at the host key check. Which change to the project's `ansible.cfg` lets the runs through?
+  options:
+    - text: "`host_key_checking = False` under `[privilege_escalation]`"
+      correct: false
+      why: Ansible reads a setting only in its own section. Here the line is ignored without a warning, and the check stays on.
+    - text: None; host keys are SSH's business and can only be changed in `~/.ssh/config`
+      correct: false
+      why: "`~/.ssh/config` would work too, but Ansible has its own setting for this: `host_key_checking` under `[defaults]`, which travels with the project."
+    - text: "`inventory` pointing at a freshly written inventory file each night, so Ansible treats the hosts as new"
+      correct: false
+      why: The stored keys live in SSH's `known_hosts`, not in the inventory. A new inventory with the same names and addresses meets the same old keys.
+    - text: "`host_key_checking = False` under `[defaults]`"
+      correct: true
+      why: Ansible then passes `-o StrictHostKeyChecking=no` to `ssh`, so new or changed keys no longer stop the connection. It also drops the check that you reached the right machine; fine for throwaway VMs, not for production.
+
+- id: ansible-cfg-2
+  type: choice
+  question: Your project logs in as `deploy`, which has full sudo rights. Root may not log in over SSH. Tasks that edit files under `/etc` fail with permission denied. Which `ansible.cfg` change fixes this for every play?
+  options:
+    - text: "`become_user = root` under `[privilege_escalation]`"
+      correct: false
+      why: "`root` is already the default `become_user`. It names whom to become, but nothing switches user while `become` is off."
+    - text: "`become = True` under `[privilege_escalation]`"
+      correct: true
+      why: Ansible still logs in as `deploy`, then runs each task through `sudo` (the default `become_method`) as `root` (the default `become_user`).
+    - text: "`become = True` under `[defaults]`"
+      correct: false
+      why: "`become` belongs to `[privilege_escalation]`. In `[defaults]` the line is ignored without a warning."
+    - text: "`remote_user = root` under `[defaults]`"
+      correct: false
+      why: Ansible would then log in as root, which these servers refuse. Become keeps the login as `deploy` and switches user with sudo.
+
+- id: ansible-cfg-3
+  type: choice
+  question: Your `~/.ansible.cfg` sets `forks = 50`. The project you just cloned has an `ansible.cfg` in its root that sets `inventory` and `remote_user`, but not `forks`. You run a playbook from the project root. How many hosts does Ansible work on at once?
+  options:
+    - text: 50, because the project file says nothing about forks and your home file fills the gap
+      correct: false
+      why: Files are not merged. Ansible reads the first file it finds, `./ansible.cfg`, and no other; a setting missing there takes the built-in default.
+    - text: 50, because `~/.ansible.cfg` is read after the project file and overrides it
+      correct: false
+      why: The list is a search, not a stack. The first file found is used, and the files after it are not read at all.
+    - text: "5"
+      correct: true
+      why: Only `./ansible.cfg` is read. It does not set `forks`, so the built-in default of 5 applies. `ansible-config dump --only-changed` would show no `DEFAULT_FORKS` line.
+    - text: None; Ansible stops with an error because two config files disagree
+      correct: false
+      why: Ansible never sees the second file, so there is nothing to disagree. It uses the first one found without a warning.
+
+- id: ansible-cfg-4
+  type: choice
+  question: In the repository root, `ansible-playbook playbooks/site.yml` works. A colleague runs `cd playbooks`, then `ansible-playbook site.yml`, and Ansible warns that no inventory was parsed. The project's `ansible.cfg`, with `inventory = inventory.ini`, is in the root. Why?
+  options:
+    - text: Ansible looks for `ansible.cfg` only in the current directory, `playbooks/`, so it never read the project file
+      correct: true
+      why: Ansible does not search parent directories. `ansible --version` in `playbooks/` shows which file, if any, it found instead. Run from the root, or set `ANSIBLE_CONFIG`.
+    - text: Ansible looks for `ansible.cfg` next to the playbook, and `playbooks/` has none
+      correct: false
+      why: "The playbook's location plays no part. From the root, `ansible-playbook playbooks/site.yml` finds the project file although the playbook is in `playbooks/`: Ansible looks in the current directory."
+    - text: Ansible read the project file, but `inventory.ini` is relative to the current directory, so it looked for `playbooks/inventory.ini`
+      correct: false
+      why: A relative path in `ansible.cfg` is relative to the file's own directory. The problem comes earlier, as from `playbooks/` the project file is not read at all.
+    - text: Ansible searched upwards like `git` and found the file, but the colleague's `~/.ansible.cfg` overrode it
+      correct: false
+      why: Ansible does not search upwards, and a `./ansible.cfg` it finds is never overridden by `~/.ansible.cfg`. Only one file is read.
+
+- id: ansible-cfg-5
+  type: choice
+  question: On a shared build server the repository is checked out to `/srv/build`, a directory with mode `0777`. You run Ansible in `/srv/build`, where the project's `ansible.cfg` is readable by everyone, yet `ansible --version` shows `config file = None`. Why?
+  options:
+    - text: In a project directory the file must be called `.ansible.cfg`
+      correct: false
+      why: The leading dot is only for the per-user file in your home directory. A project file is `ansible.cfg`.
+    - text: The file has to be owned by the user running Ansible
+      correct: false
+      why: Ansible checks that it can read the file and that the directory is not world-writable. The file's owner does not matter.
+    - text: Ansible ignores `ansible.cfg` in a world-writable current directory, since anyone could have planted it there
+      correct: true
+      why: "It prints a warning saying so and moves down the list. Remove write access for others (`chmod o-w /srv/build`) or set `ANSIBLE_CONFIG=/srv/build/ansible.cfg`."
+    - text: Without `ANSIBLE_CONFIG`, Ansible reads only `~/.ansible.cfg` and `/etc/ansible/ansible.cfg`
+      correct: false
+      why: The current directory is second in the list, right after `ANSIBLE_CONFIG`. It is skipped here only because the directory is world-writable.
+
+- id: ansible-cfg-6
+  type: choice
+  question: "The project's `ansible.cfg` sets `remote_user = deploy`. The inventory has the line `db1 ansible_user=dbadmin`. The play sets no `remote_user`. You run `ansible-playbook -u alice site.yml`. Which user does Ansible log in to `db1` as?"
+  options:
+    - text: "`alice`, because the command line always wins"
+      correct: false
+      why: "`-u` beats the config file and environment variables, but a variable beats `-u`, and `db1` has `ansible_user`. Hosts without it would get `alice`."
+    - text: "`deploy`, because the project's `ansible.cfg` sets the standard for everyone"
+      correct: false
+      why: The config file is the weakest layer. An environment variable, `-u`, a play keyword or a variable all beat it.
+    - text: None; Ansible stops because the user is set in three places
+      correct: false
+      why: Overlapping settings are normal. The strongest layer wins without a warning.
+    - text: "`dbadmin`"
+      correct: true
+      why: Variables such as `ansible_user` are the strongest layer. They beat `-u`, which beats `ANSIBLE_REMOTE_USER`, which beats `remote_user` in `ansible.cfg`.

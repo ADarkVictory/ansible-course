@@ -6,3 +6,5 @@ modules:
         title: What is Ansible?
       - file: 02-inventories
         title: Inventories
+      - file: 03-ansible-cfg
+        title: ansible.cfg

@@ -1,0 +1,10 @@
+CONFIG_FILE() = /home/student/ansible.cfg
+DEFAULT_BECOME(/home/student/ansible.cfg) = True
+DEFAULT_BECOME_METHOD(/home/student/ansible.cfg) = sudo
+DEFAULT_BECOME_USER(/home/student/ansible.cfg) = root
+DEFAULT_FORKS(/home/student/ansible.cfg) = 20
+DEFAULT_HOST_LIST(/home/student/ansible.cfg) = ['/home/student/inventory.ini']
+DEFAULT_REMOTE_USER(/home/student/ansible.cfg) = deploy
+HOST_KEY_CHECKING(/home/student/ansible.cfg) = False
+
+GALAXY_SERVERS:

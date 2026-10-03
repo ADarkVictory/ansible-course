@@ -8,6 +8,7 @@
 #   list-hosts.json: ansible <pattern> --list-hosts over inventory-multi.ini      (tools/gen-hosts.py)
 #   ansible-inventory -i inventory.yml --graph                                    (inv-*: the fixture as /home/student/inventory.yml)
 #   ansible-inventory -i inventory.ini --graph                                    (inventory-lesson: the INI fixture)
+#   ansible --version, ansible-config dump --only-changed with ansible.cfg        (cfg-*: tools/fixtures/ansible-cfg.ini)
 # ANSIBLE_FORKS=1 keeps host order deterministic (web1 before web2); default forks=5 races.
 # <name>-second is <name>.yml run a second time with no cleanup in between.
 # Needs: ansible-core 2.21.4 (the .venv, an active environment, or uv + python3.13 to make the .venv) and a writable /home/student (CI: sudo mkdir -p /home/student && sudo chown $USER /home/student).
@@ -80,6 +81,16 @@ rm -f /home/student/inventory.yml
 cp "$root/tools/fixtures/inventory-lesson.ini" /home/student/inventory.ini
 ansible-inventory -i inventory.ini --graph > "$out/inventory-lesson.txt" 2>&1 < /dev/null
 rm -f /home/student/inventory.ini
+# ansible.cfg lesson (cfg-*): the lesson's project config as /home/student/ansible.cfg. The capture's own ANSIBLE_* variables are
+# unset, or ansible-config would list them as changed settings. cfg-world-writable: the warning alone (stderr), from a 0777 directory.
+cp "$root/tools/fixtures/ansible-cfg.ini" /home/student/ansible.cfg
+cfg() { env -u ANSIBLE_NOCOLOR -u ANSIBLE_FORCE_COLOR -u ANSIBLE_FORKS "$@" 2>&1 < /dev/null; }
+cfg ansible --version | sed -n 1,2p > "$out/cfg-version.txt"
+cfg ansible-config dump --only-changed > "$out/cfg-dump.txt"
+cfg ANSIBLE_FORKS=50 ansible-config dump --only-changed | grep FORKS > "$out/cfg-dump-env.txt"
+mkdir -p /home/student/shared && chmod 0777 /home/student/shared && cp /home/student/ansible.cfg /home/student/shared/
+(cd /home/student/shared && ansible --version 2>&1 > /dev/null < /dev/null) > "$out/cfg-world-writable.txt"
+rm -rf /home/student/shared /home/student/ansible.cfg
 "$bin/python" "$root/tools/gen-hosts.py" "$invm" > "$out/list-hosts.json"
 "$bin/python" "$root/tools/gen-kv.py" > "$out/kv.json"
 exit 0
