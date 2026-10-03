@@ -1,0 +1,200 @@
+- id: modules-and-fqcn-1
+  type: choice
+  question: "Your project has a `library/` directory, next to the playbook, holding `dnf.py`, a module a colleague wrote. A task in the playbook uses `dnf:`. Which module runs?"
+  options:
+    - text: "`ansible.builtin.dnf`, because a short name means `ansible.builtin`"
+      correct: false
+      why: "A short name is looked up as `ansible.legacy.dnf`. That usually ends at the built-in module, but `library/` next to the playbook is searched first."
+    - text: Your colleague's `library/dnf.py`
+      correct: true
+      why: "`dnf:` is looked up as `ansible.legacy.dnf`, and `library/` comes before the built-in module. Writing `ansible.builtin.dnf` would run the real one."
+    - text: Neither, because Ansible stops when two modules share a name
+      correct: false
+      why: Ansible takes the first match and says nothing. That silence is why ansible-lint's production profile wants an FQCN on every task.
+    - text: "`ansible.builtin.dnf`, because ansible-lint rejects the short name"
+      correct: false
+      why: ansible-lint only reads the playbook and reports; it never changes what runs. At run time, `dnf:` still finds `library/dnf.py` first.
+
+- id: modules-and-fqcn-2
+  type: command
+  task: "A playbook restarts nginx with `ansible.builtin.shell: systemctl restart nginx`. The module for that job is `ansible.builtin.systemd_service`. Print its playbook snippet to see its parameters."
+  output_golden: doc-snippet-systemd-service
+  solution: ansible-doc -s ansible.builtin.systemd_service
+  checks:
+    - program: ansible-doc
+      hint: Module documentation has its own command, installed with ansible-core.
+    - module: ansible.builtin.systemd_service
+      hint: Name the module the task will use, ansible.builtin.systemd_service.
+    - flags: { snippet: true }
+      hint: Without an option, ansible-doc prints the whole page. Which option prints only the task skeleton?
+  wrong:
+    - code: ansible web -m ansible.builtin.systemd_service --help
+      fails: 1
+    - code: ansible-doc -s ansible.builtin.service
+      fails: 2
+    - code: ansible-doc ansible.builtin.systemd_service
+      fails: 3
+
+- id: modules-and-fqcn-3
+  type: command
+  task: List only the modules that ship with ansible-core, with their descriptions.
+  output_golden: doc-list-builtin
+  solution: ansible-doc -l ansible.builtin
+  checks:
+    - program: ansible-doc
+      hint: Use ansible-doc.
+    - flags: { list: true }
+      hint: Which option lists modules instead of documenting one?
+    - pattern: ansible.builtin
+      hint: Narrow the list to one collection. ansible-core's own modules are all in one, and -l needs its full namespace.collection name.
+  wrong:
+    - code: ansible-doc -s ansible.builtin
+      fails: 2
+    - code: ansible-doc -l
+      fails: 3
+    - code: ansible-doc -l builtin
+      fails: 3
+    - code: ansible-doc -l ansible
+      fails: 3
+
+- id: modules-and-fqcn-4
+  type: write
+  task: "This task from an old project fails ansible-lint twice: a short module name, and `shell` where a module exists. Rewrite it with `ansible.builtin.dnf` so that nginx is installed. Keep the names."
+  inventory: { web: [web1, web2] }
+  fqcn: true
+  fqcn_hint: Name every module by its FQCN, ansible.builtin.<module>. ansible.builtin.yum does not count, as it only redirects to another module.
+  starter: |
+    - name: Set up the web servers
+      hosts: web
+      become: true
+      tasks:
+        - name: Install nginx
+          shell: yum install -y nginx
+  solution: |
+    - name: Set up the web servers
+      hosts: web
+      become: true
+      tasks:
+        - name: Install nginx
+          ansible.builtin.dnf:
+            name: nginx
+            state: present
+  checks:
+    - forbid: { module: shell }
+      hint: The shell task is still there. Ansible cannot see what its command did, so it reports changed on every run. Let a module do the job.
+    - forbid: { module: command }
+      hint: command has the same problem as shell. Use a module that knows which packages are installed.
+    - task: { module: dnf }
+      has: { name: nginx }
+      hint: Use ansible.builtin.dnf, and give it the package through its name parameter.
+    - forbid: { module: dnf }
+      has: { state: latest }
+      hint: latest also upgrades nginx whenever a newer package appears, and ansible-lint's package-latest rule rejects it. Which state means installed, at any version?
+    - forbid: { module: dnf }
+      has: { state: absent }
+      hint: absent removes the package. The task must install it.
+    - forbid: { module: dnf }
+      has: { state: removed }
+      hint: removed is another name for absent. The task must install the package.
+  right:
+    - |
+      - name: Set up the web servers
+        hosts: web
+        become: true
+        tasks:
+          - name: Install nginx
+            ansible.builtin.dnf:
+              name: nginx
+              state: installed
+    - |
+      - name: Set up the web servers
+        hosts: web
+        become: true
+        tasks:
+          - name: Install nginx
+            ansible.builtin.dnf:
+              name: nginx
+  wrong:
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              dnf:
+                name: nginx
+                state: present
+      fails: fqcn
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.yum:
+                name: nginx
+                state: present
+      fails: fqcn
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.shell: dnf install -y nginx
+      fails: 1
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.command: dnf install -y nginx
+      fails: 2
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.dnf:
+                name: nginx
+                state: latest
+      fails: 4
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.dnf:
+                name: nginx
+                state: absent
+      fails: 5
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.dnf:
+                name: nginx
+                state: removed
+      fails: 6
+
+- id: modules-and-fqcn-5
+  type: choice
+  question: "A play installs nginx with `ansible.builtin.shell: yum install -y nginx`. You run it twice. On the second run nginx is already installed. What does that task report?"
+  options:
+    - text: "`ok`, because yum finds nginx installed and does nothing"
+      correct: false
+      why: Yum does nothing, but Ansible cannot see that. shell only reports that the command ran and exited 0.
+    - text: "`changed`, as on the first run"
+      correct: true
+      why: "shell and command report `changed: true` whenever the command runs and exits 0. That is why the dnf module, which checks first and reports `ok`, is the right tool."
+    - text: "`FAILED!`, because yum exits non-zero when the package is already installed"
+      correct: false
+      why: "Yum prints `Nothing to do` and exits 0, so the task succeeds."
+    - text: "`ok`, because Ansible remembers that this task already ran"
+      correct: false
+      why: Ansible keeps no record of earlier runs. Only the module's result decides the status, and shell's result says changed.

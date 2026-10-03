@@ -10,3 +10,5 @@ modules:
         title: ansible.cfg
       - file: 04-ad-hoc-commands
         title: Ad-hoc commands
+      - file: 05-modules-and-fqcn
+        title: Modules and FQCN
