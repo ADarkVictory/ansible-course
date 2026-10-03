@@ -1,0 +1,13 @@
+[ERROR]: Task failed: Module failed: value of state must be one of: absent, installed, latest, present, removed, got: install
+Origin: <adhoc 'dnf' task>
+
+{'action': 'dnf', 'args': {'name': 'x', 'use_backend': 'dnf4', 'state': 'install'}, 'timeout': 0, 'async_val': 0, [...]
+
+web1 | FAILED! => {
+    "changed": false,
+    "msg": "value of state must be one of: absent, installed, latest, present, removed, got: install"
+}
+web2 | FAILED! => {
+    "changed": false,
+    "msg": "value of state must be one of: absent, installed, latest, present, removed, got: install"
+}

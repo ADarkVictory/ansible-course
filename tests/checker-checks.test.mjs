@@ -320,3 +320,9 @@ test('a task using a real module the course does not simulate fails with the hin
   const r = check(one([{ task: { module: 'file' }, hint: 'h' }]), play('  tasks:', '    - ansible.builtin.stat:', '        path: /tmp/x'));
   assert.deepEqual(r, { ok: false, output: '', hint: "This course doesn't simulate ansible.builtin.stat yet." });
 });
+
+test('a value outside the choices: the real fatal, no check hint, before the fqcn rule', () => {
+  const r = check(one([{ task: { module: 'dnf' }, hint: 'h' }], { fqcn: true }), play('  tasks:', '    - dnf: { name: nginx, state: install }'));
+  assert.deepEqual([r.ok, r.failedCheck, r.hint], [false, undefined, undefined]);
+  assert.match(r.output, /value of state must be one of: absent, installed, latest, present, removed, got: install/);
+});

@@ -329,3 +329,7 @@ test('an ansible line in an exercise with no inventory (an ansible-doc exercise)
     assert.deepEqual(doc(line, snippet, { output: 'x' }), { ok: false, output: '', hint: 'Show the snippet.', failedCheck: 1 }, line);
   }
 });
+
+test('ad hoc: a value outside the choices fails as real ansible prints it', () => {
+  assert.equal(run("ansible web -m dnf -a 'name=x use_backend=dnf4 state=install'").output, golden('adhoc-invalid-choice'));
+});

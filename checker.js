@@ -22,8 +22,8 @@ const SCHEMA = yaml.YAML11_SCHEMA.withTags(
  * @returns { plays, hint? } | { error, hint? }
  *   Every task's args are a mapping: k=v strings are parsed as Ansible does (free-form modules keep the bare text as `_raw_params`),
  *   the `args` keyword is merged in, and aliases are renamed to the canonical parameter.
- *   A task (in any list) whose parameters real Ansible would reject at run time carries `unsupported: <exact msg>`;
- *   the renderer raises it when the task (or notified handler) runs.
+ *   A task (in any list) whose arguments the module would reject at run time (a value outside its choices, an unknown parameter)
+ *   carries `unsupported: <exact msg>`; the renderer raises it when the task (or notified handler) runs.
  *   A hint next to plays (curly quotes) means the checker must still fail: real Ansible would run the wrong value.
  */
 export function parsePlaybook(source, registry, keywords) {
@@ -56,7 +56,7 @@ export function checkWrite(exercise, source, registry, keywords, opts = {}) {
   }
 
   const first = render(plays, exercise.inventory, { source });
-  // A playbook that real Ansible would stop on (unsupported parameter on a task that runs, notify naming no handler)
+  // A playbook that real Ansible would stop on (bad arguments on a task that runs, notify naming no handler)
   // is never correct, and the hint for a check would only mislead: the learner needs that error first.
   // render knows what is reachable, so its [ERROR] block is the test.
   if (/^\[ERROR\]: /m.test(first)) return fail(first);
@@ -254,7 +254,7 @@ export function parseCommand(line, registry) {
     program, pattern: pos[0], module, args: spec ? normalise(spec, { ...typed }) : { ...typed }, flags: rest,
     mod, known: real, tombstone, typedArgs: typed, rawParams,
     noArg: !text && (module === 'ansible.builtin.command' || module === 'ansible.builtin.shell'),
-    unsupported: spec && !rawParams ? unsupportedMsg(spec, mod, typed, twin) : undefined,
+    unsupported: spec && !rawParams ? argsError(spec, mod, typed, twin) : undefined,
   };
 }
 
@@ -731,7 +731,7 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
     if (/^\{\{[\s\S]*\}\}$/.test(args._raw_params)) delete args._raw_params;
     else task.rawParams = child(tnode, key)?.key ?? tnode; // the action key's node; the caller turns it into { line, col }
   }
-  const bad = !task.rawParams && unsupportedMsg(spec, mod, args, twin);
+  const bad = !task.rawParams && argsError(spec, mod, args, twin);
   if (bad) task.unsupported = bad;
   normalise(spec, args);
   return task;
@@ -739,7 +739,19 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
 
 // Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
 // The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
-function unsupportedMsg(spec, mod, args, twin) {
+// The module's own argument check (module_utils/common/arg_spec.py), as the first error it reports: a value outside a parameter's
+// `choices` (modules.yaml, in argument-spec order) comes before unknown parameters, which are added last. Exact and case-sensitive,
+// except that "True"/"False" stand for the one choice that is a boolean word. A value with {{ }} or {% %} is unknown until run time.
+// ponytail: only string values are checked (Ansible first converts others, with a warning), and two bad values report in doc order.
+const BOOL_WORDS = { True: ['y', 'yes', 'on', '1', 'true', 't'], False: ['n', 'no', 'off', '0', 'false', 'f'] };
+function argsError(spec, mod, args, twin) {
+  const named = normalise(spec, { ...args });
+  for (const [p, choices] of Object.entries(spec.choices ?? {})) {
+    const v = named[p];
+    if (typeof v !== 'string' || /\{\{|\{%/.test(v) || choices.includes(v)) continue;
+    if (Object.hasOwn(BOOL_WORDS, v) && choices.filter((c) => BOOL_WORDS[v].includes(c)).length === 1) continue;
+    return `value of ${p} must be one of: ${choices.join(', ')}, got: ${v}`;
+  }
   const [, names, aliases = ''] = /^(.*?)(?: \((.*)\))?\.$/.exec(spec.supported);
   const legal = new Set([...spec.params, ...Object.keys(spec.aliases), ...`${names}, ${aliases}`.split(', ')]);
   const bad = Object.keys(args).filter((k) => !legal.has(k)).sort();
@@ -1075,8 +1087,8 @@ const pyStr = (v) => typeof v === 'string' ? v : pyRepr(v);
 const pyFalsy = (v) => v === null || v === false || v === 0 || v === ''
   || (Array.isArray(v) ? !v.length : isMap(v) && !Object.keys(v).length);
 
-// textwrap.shorten(text, width=120)
-function shorten(s) {
+// textwrap.shorten(text, width=120): the one-line context Ansible shows for an origin with no file (a value, an ad-hoc task).
+export function shorten(s) {
   s = s.trim().split(/\s+/).join(' ');
   if (s.length <= 120) return s;
   const cut = s.slice(0, 115);

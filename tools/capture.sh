@@ -37,6 +37,7 @@ cd /home/student || exit 1
 
 for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param unknown-play-keyword task-keyword-typo \
          yaml-colon yaml-unclosed-quote yaml-dedent yaml-mapping-values no-action task-not-a-dict hosts-missing args-unbalanced-quote raw-params missing-handler tombstone-include tombstone-module yum-unsupported \
+         invalid-choice invalid-choice-unsupported \
          run-sample run-sample-second run-no-facts run-idempotency run-idempotency-second run-intro run-intro-second adhoc-ping; do
   src=${f%-second}
   [ "$src" != "$f" ] || rm -rf /tmp/web1 /tmp/web2 /tmp/app   # fresh hosts; the second run must see the first run's state
@@ -70,6 +71,7 @@ adhoc adhoc-include-tombstone web -m include
 adhoc adhoc-module-tombstone web -m bigip_facts
 adhoc adhoc-yum-unsupported web -m yum -a 'name=x use_backend=dnf4 bogus=1'
 adhoc adhoc-unsupported-param-redirect web -m systemd -a 'name=x bogus=1'
+adhoc adhoc-invalid-choice web -m dnf -a 'name=x use_backend=dnf4 state=install'
 adhoc adhoc-limit 'web:db' -m ping --limit prod
 adhoc adhoc-limit-empty web -m ping --limit db
 adhoc adhoc-limit-unmatched nosuch -m ping --limit nosuch

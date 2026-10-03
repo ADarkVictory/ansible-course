@@ -93,12 +93,14 @@ test('every output_golden names a file in tests/golden', () => {
   for (const e of all.filter((e) => 'output_golden' in e)) assert.ok(existsSync(new URL(`tests/golden/${e.output_golden}.txt`, root)), `${e.id}: no tests/golden/${e.output_golden}.txt`);
 });
 
-// fails: fqcn names the FQCN rule of an exercise with fqcn: true, which runs before the checks.
+// fails: fqcn names the FQCN rule of an exercise with fqcn: true, which runs before the checks; fails: error, a playbook real
+// Ansible stops on (its [ERROR] is the learner's feedback, with no check hint).
 test('every wrong entry has code and a valid 1-based fails', () => {
   for (const e of all.filter((e) => e.wrong)) {
     for (const w of e.wrong) {
       assert.ok(typeof w.code === 'string', `${e.id}: wrong entry needs code`);
       if (w.fails === 'fqcn') { assert.equal(e.fqcn, true, `${e.id}: fails: fqcn needs fqcn: true`); continue; }
+      if (w.fails === 'error') continue;
       assert.ok(Number.isInteger(w.fails) && w.fails >= 1 && w.fails <= (e.checks?.length ?? 0), `${e.id}: fails ${w.fails} is not an index into checks`);
     }
   }
@@ -127,6 +129,10 @@ test('every wrong entry fails at exactly its check', () => {
   for (const e of all.filter((e) => e.type !== 'choice')) {
     for (const w of e.wrong ?? []) {
       const r = run(e, w.code);
+      if (w.fails === 'error') {
+        assert.ok(!r.ok && r.failedCheck === undefined && /^\[ERROR\]: /m.test(r.output), `${e.id}: wrong entry expected real Ansible's [ERROR]\n${w.code}`);
+        continue;
+      }
       assert.ok(!r.ok && r.failedCheck === w.fails, `${e.id}: wrong entry expected to fail check ${w.fails}, got ${r.ok ? 'ok' : `check ${r.failedCheck}`}\n${w.code}`);
     }
   }

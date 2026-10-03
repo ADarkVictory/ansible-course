@@ -26,6 +26,8 @@ for (const [name, n, opts] of [
   ['run-no-facts: no Gathering Facts', 'run-no-facts', {}],
   ['unsupported-param: [ERROR] block with Origin and excerpt, fatal per host, failed=1', 'unsupported-param', {}],
   ['yum-unsupported: yum runs as dnf, so the message names ansible.legacy.dnf', 'yum-unsupported', {}],
+  ['invalid-choice: a value outside the module\'s choices, listed in argument-spec order', 'invalid-choice', {}],
+  ['invalid-choice-unsupported: choices are checked before unknown parameters, and case-sensitively', 'invalid-choice-unsupported', {}],
   ['raw-params: bare text on a module that takes none fails as Ansible prints it (caused-by block)', 'raw-params', {}],
   ['missing-handler: notify naming no handler stops the run with the real [ERROR]', 'missing-handler', {}],
   ['run-idempotency: unnamed tasks, creates (both forms), changed_when, pre_tasks flush, debug msg/var', 'run-idempotency', {}],
@@ -137,4 +139,19 @@ test('render: hosts patterns (intersection, exclusion, comma form) and one warni
   const { plays, error } = parsePlaybook(fixture('hosts-patterns'), registry, keywords);
   assert.equal(error, undefined);
   assert.equal(render(plays, multi, { source: fixture('hosts-patterns') }), golden('run-hosts-patterns'));
+});
+
+test('choices: a {{ }} value is unknown until run time and not checked; only strings are checked', () => {
+  const task = (state) => `- hosts: web\n  gather_facts: false\n  tasks:\n    - ansible.builtin.file:\n        path: /tmp/x\n        state: ${state}\n`;
+  for (const v of ['"{{ wanted }}"', 'directory', 'Directory']) {
+    const ok = !v.startsWith('D');
+    assert.equal(/\[ERROR\]/.test(run(task(v))), !ok, v);
+  }
+  assert.doesNotMatch(run(task('7')), /\[ERROR\]/); // ponytail ceiling: a number is converted to a string by Ansible first (not simulated)
+});
+
+test('choices: "True"/"False" match a choice that is the one boolean word among them (module_utils/common/parameters.py)', () => {
+  const task = (k, v) => `- hosts: web\n  gather_facts: false\n  tasks:\n    - ansible.builtin.${k}: ${v}\n`;
+  assert.doesNotMatch(run(task('apt', 'upgrade=True')), /\[ERROR\]/); // yes is the only true word in dist, full, no, safe, yes
+  assert.match(run(task('user', 'name=x update_password=True')), /value of update_password must be one of: always, on_create, got: True/);
 });

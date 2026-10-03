@@ -7,6 +7,7 @@ ansible.builtin.ping:
   reports_as:
     short: ping
     fqcn: ansible.builtin.ping
+  choices: {}
 ansible.builtin.command:
   params:
   - argv
@@ -24,6 +25,7 @@ ansible.builtin.command:
   reports_as:
     short: ansible.legacy.command
     fqcn: ansible.legacy.command
+  choices: {}
 ansible.builtin.shell:
   params:
   - chdir
@@ -39,6 +41,7 @@ ansible.builtin.shell:
   reports_as:
     short: ansible.legacy.command
     fqcn: ansible.legacy.command
+  choices: {}
 ansible.builtin.copy:
   params:
   - attributes
@@ -69,6 +72,7 @@ ansible.builtin.copy:
   reports_as:
     short: ansible.legacy.copy
     fqcn: ansible.legacy.copy
+  choices: {}
 ansible.builtin.file:
   params:
   - access_time
@@ -99,6 +103,14 @@ ansible.builtin.file:
   reports_as:
     short: file
     fqcn: ansible.builtin.file
+  choices:
+    state:
+    - absent
+    - directory
+    - file
+    - hard
+    - link
+    - touch
 ansible.builtin.user:
   params:
   - append
@@ -149,6 +161,13 @@ ansible.builtin.user:
   reports_as:
     short: user
     fqcn: ansible.builtin.user
+  choices:
+    state:
+    - absent
+    - present
+    update_password:
+    - always
+    - on_create
 ansible.builtin.group:
   params:
   - force
@@ -166,6 +185,10 @@ ansible.builtin.group:
   reports_as:
     short: group
     fqcn: ansible.builtin.group
+  choices:
+    state:
+    - absent
+    - present
 ansible.builtin.dnf:
   params:
   - allow_downgrade
@@ -207,6 +230,13 @@ ansible.builtin.dnf:
   reports_as:
     short: ansible.legacy.dnf
     fqcn: ansible.legacy.dnf
+  choices:
+    state:
+    - absent
+    - installed
+    - latest
+    - present
+    - removed
 ansible.builtin.apt:
   params:
   - allow_change_held_packages
@@ -249,6 +279,19 @@ ansible.builtin.apt:
   reports_as:
     short: apt
     fqcn: ansible.builtin.apt
+  choices:
+    state:
+    - absent
+    - build-dep
+    - fixed
+    - latest
+    - present
+    upgrade:
+    - dist
+    - full
+    - 'no'
+    - safe
+    - 'yes'
 ansible.builtin.package:
   params:
   - name
@@ -262,6 +305,13 @@ ansible.builtin.package:
   reports_as:
     short: ansible.legacy.dnf
     fqcn: ansible.legacy.dnf
+  choices:
+    state:
+    - absent
+    - installed
+    - latest
+    - present
+    - removed
 ansible.builtin.service:
   params:
   - arguments
@@ -283,6 +333,12 @@ ansible.builtin.service:
   reports_as:
     short: ansible.legacy.systemd
     fqcn: ansible.legacy.systemd
+  choices:
+    state:
+    - reloaded
+    - restarted
+    - started
+    - stopped
 ansible.builtin.systemd_service:
   params:
   - daemon_reexec
@@ -304,6 +360,16 @@ ansible.builtin.systemd_service:
   reports_as:
     short: systemd_service
     fqcn: ansible.builtin.systemd_service
+  choices:
+    scope:
+    - system
+    - user
+    - global
+    state:
+    - reloaded
+    - restarted
+    - started
+    - stopped
 ansible.builtin.lineinfile:
   params:
   - attributes
@@ -340,6 +406,10 @@ ansible.builtin.lineinfile:
   reports_as:
     short: lineinfile
     fqcn: ansible.builtin.lineinfile
+  choices:
+    state:
+    - absent
+    - present
 ansible.builtin.template:
   params:
   - attributes
@@ -374,6 +444,7 @@ ansible.builtin.template:
   reports_as:
     short: ansible.legacy.copy
     fqcn: ansible.legacy.copy
+  choices: {}
 ansible.builtin.debug:
   params:
   - msg
@@ -385,6 +456,7 @@ ansible.builtin.debug:
   reports_as:
     short: debug
     fqcn: ansible_collections.ansible.builtin.plugins.action.debug
+  choices: {}
 ansible.builtin.setup:
   params:
   - fact_path
@@ -397,6 +469,7 @@ ansible.builtin.setup:
   reports_as:
     short: setup
     fqcn: ansible.builtin.setup
+  choices: {}
 known:
 - add_host
 - apt

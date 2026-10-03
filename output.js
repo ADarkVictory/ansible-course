@@ -2,7 +2,7 @@
 // render prints what ansible-core 2.21.4's ansible-playbook prints (default callback, ANSIBLE_NOCOLOR=1, COLUMNS=80,
 // forks=1) for plays from checker.js's parsePlaybook. Formats are copied from tests/golden/run-*.txt and unsupported-param.txt.
 // renderAdhoc prints what `ansible <pattern> -m ...` prints (tests/golden/adhoc-*.txt); both share resolveHosts.
-import { format, excerpt, pyRepr } from './checker.js';
+import { format, excerpt, pyRepr, shorten } from './checker.js';
 
 const NEVER_CHANGES = new Set(['ansible.builtin.ping', 'ansible.builtin.debug', 'ansible.builtin.setup']);
 const RECAP = ['ok', 'changed', 'unreachable', 'failed', 'skipped', 'rescued', 'ignored'];
@@ -210,7 +210,7 @@ export function renderAdhoc(cmd, inventory, { stdout = '' } = {}) {
   const { mod } = cmd;
   const each = (line) => hosts.map(line).join('');
   const fatal = (msg) => each((h) => `${h} | FAILED! => ${dump({ changed: false, msg })}\n`);
-  const task = `{'action': ${pyRepr(mod)}, 'args': ${pyRepr(cmd.typedArgs)}, 'timeout': 0, 'async_val': 0, 'poll': 15}`;
+  const task = shorten(`{'action': ${pyRepr(mod)}, 'args': ${pyRepr(cmd.typedArgs)}, 'timeout': 0, 'async_val': 0, 'poll': 15}`); // golden: adhoc-invalid-choice
   // A removed name: an action is refused before the task runs, a module fails at run time. Golden: adhoc-include-tombstone, adhoc-module-tombstone.
   if (cmd.tombstone) {
     const { kind, message } = cmd.tombstone;

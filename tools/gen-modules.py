@@ -37,6 +37,20 @@ def unsupported(m, name):
         sys.exit(f"gen-modules: no 'Supported parameters' message for {name}:\n{run.stdout}{run.stderr}")
     return found.groups()
 
+# Parameters with `choices` whose bad value the module itself rejects; these skip it: the action plugin acts on the value first.
+CHOICE_SKIP = {("dnf", "use_backend"): "picks the dnf backend (and fails on a host without dnf)",
+               ("package", "use_backend"): "picks the backend", ("template", "newline_sequence"): "prints its own message"}
+
+def choices(m, p, documented):
+    """The module's own choices for p, in argument-spec order: the order 'value of p must be one of: ...' prints (ansible-doc may
+    list them in another order), from the real module run with a bad value."""
+    run = subprocess.run([doc.with_name("ansible"), "web1", "-i", inventory, "-m", "ansible.builtin." + m, "-a",
+                          json.dumps({**VALID[m], p: "zz_bogus"})], capture_output=True, text=True, env=env, cwd=root / "tools")
+    found = re.search(rf'"msg": "value of {p} must be one of: (.+), got: zz_bogus"', run.stdout + run.stderr)
+    if not found or set(found[1].split(", ")) != {str(c) for c in documented}:
+        sys.exit(f"gen-modules: no choices message for {m} {p} matching {documented}:\n{run.stdout}{run.stderr}")
+    return found[1].split(", ")
+
 docs = json.loads(subprocess.check_output([doc, "--json", *("ansible.builtin." + m for m in MODULES)], text=True))
 out = {}
 for m in MODULES:
@@ -53,6 +67,9 @@ for m in MODULES:
     # between the short and the FQCN spelling, so both are recorded.
     (short, _), (long, out[fq]["supported"]) = unsupported(m, m), unsupported(m, fq)
     out[fq]["reports_as"] = {"short": short, "fqcn": long}
+    # package runs dnf, which checks the values (package documents no choices of its own).
+    spec_opts = docs["ansible.builtin." + ("dnf" if m == "package" else m)]["doc"].get("options") or {}
+    out[fq]["choices"] = {p: choices(m, p, o["choices"]) for p, o in spec_opts.items() if "choices" in o and (m, p) not in CHOICE_SKIP}
 # package and service are action plugins that run dnf / systemd_service (reports_as, and the borrowed "supported" text), so
 # they accept those modules' aliases too: `package: pkg=nginx` is `name`. Checks compare canonical names.
 for m, backend in {"package": "dnf", "service": "systemd_service"}.items():

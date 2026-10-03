@@ -1,0 +1,8 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Create the directory
+      file:
+        path: /tmp/example
+        state: Directory
+        owner_name: root
