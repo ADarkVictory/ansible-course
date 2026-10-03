@@ -1,6 +1,7 @@
 // Pure ES module, no DOM: the browser and Node run the same code.
 // parsePlaybook turns playbook text into plays, or into the exact error ansible-core 2.21.4 prints for it.
 import * as yaml from './vendor/js-yaml.mjs';
+import { render } from './output.js'; // output.js imports format/excerpt back; both only call each other at run time, so the cycle is harmless.
 
 const PATH = '/home/student/playbook.yml';
 const TAB_HINT = 'Replace tabs with spaces.';
@@ -17,6 +18,8 @@ const SCHEMA = yaml.YAML11_SCHEMA.withTags(
  * @param registry parsed modules.yaml
  * @param keywords parsed keywords.yaml ({ play, task, block } from ansible-core)
  * @returns { plays, hint? } | { error, hint? }
+ *   Every task's args are a mapping: k=v strings are parsed as Ansible does (free-form modules keep the bare text as `_raw_params`),
+ *   the `args` keyword is merged in, and aliases are renamed to the canonical parameter.
  *   A task (in any list) whose parameters real Ansible would reject at run time carries `unsupported: <exact msg>`;
  *   the renderer raises it when the task (or notified handler) runs.
  *   A hint next to plays (curly quotes) means the checker must still fail: real Ansible would run the wrong value.
@@ -26,6 +29,72 @@ export function parsePlaybook(source, registry, keywords) {
   const out = parse(src, registry, keywords);
   if (!out.hint && /[“”‘’]/.test(src)) out.hint = CURLY_HINT;
   return out;
+}
+
+// ---- Exercise checks -----------------------------------------------------------------------------------------------
+const FQCN_HINT = 'Use the fully qualified collection name, e.g. ansible.builtin.copy.';
+const CURLY = /[“”‘’]/;
+
+/**
+ * Decides whether a learner's playbook meets a `write` exercise (spec 3.3).
+ * @param exercise { inventory, checks: [{ play | task | handler | forbid, has?, hint? }], fqcn?, fqcn_hint? }
+ * @param opts     { second?: show the output of running the playbook again }
+ * @returns { ok, output, hint?, failedCheck? } failedCheck is the 1-based index into exercise.checks.
+ */
+export function checkWrite(exercise, source, registry, keywords, opts = {}) {
+  const parsed = parsePlaybook(source, registry, keywords);
+  const fail = (output, hint, failedCheck) => ({ ok: false, output, ...(hint && { hint }), ...(failedCheck && { failedCheck }) });
+  if (parsed.error) return fail(parsed.error, parsed.hint);
+  const { plays } = parsed;
+  // YAML takes curly quotes as literal text, so only a value that Ansible would act on makes the answer wrong; a name or comment is fine.
+  if (parsed.hint && plays.some(({ name, pre_tasks, tasks, post_tasks, handlers, ...play }) =>
+    hasCurly(play) || [pre_tasks, tasks, post_tasks, handlers].flat().some((t) => t && (hasCurly(t.args) || hasCurly(t.keywords))))) {
+    return fail('', parsed.hint);
+  }
+
+  const first = render(plays, exercise.inventory, { source });
+  // A playbook that real Ansible would stop on (unsupported parameter on a task that runs, notify naming no handler)
+  // is never correct, and the hint for a check would only mislead: the learner needs that error first.
+  // render knows what is reachable, so its [ERROR] block is the test.
+  if (/^\[ERROR\]: /m.test(first)) return fail(first);
+
+  const lists = (p) => [p.pre_tasks, p.tasks, p.post_tasks].flatMap((l) => l ?? []);
+  const all = plays.flatMap((p) => [...lists(p), ...p.handlers]);
+  if (exercise.fqcn && all.some((t) => !t.action.includes('.'))) return fail(first, exercise.fqcn_hint ?? FQCN_HINT);
+  const checks = exercise.checks ?? [];
+  const i = checks.findIndex((c) => {
+    if (c.play) return !plays.some((p) => has(p, c.play));
+    if (c.forbid) return all.some((t) => matches(t, c.forbid, c.has));
+    if (c.task) return !plays.some((p) => lists(p).some((t) => matches(t, c.task, c.has)));
+    if (c.handler) return !plays.some((p) => p.handlers.some((t) => matches(t, c.handler, c.has)));
+    throw new Error(`unknown check in exercise ${exercise.id}: ${JSON.stringify(c)}`);
+  });
+  if (i >= 0) return fail(first, checks[i].hint, i + 1);
+  return { ok: true, output: opts.second ? render(plays, exercise.inventory, { second: true, source }) : first };
+}
+
+const hasCurly = (v) => typeof v === 'string' ? CURLY.test(v)
+  : v !== null && typeof v === 'object' && Object.entries(v).some(([k, x]) => CURLY.test(k) || hasCurly(x));
+
+// A task matches { module, name? } (short module names are ansible.builtin) and carries every key of `want` in its args or keywords.
+function matches(task, { module, name }, want) {
+  return (module === undefined || task.module === (module.includes('.') ? module : `ansible.builtin.${module}`))
+    && (name === undefined || task.name === name)
+    && has({ ...task.keywords, ...task.args }, want);
+}
+
+const has = (obj, want = {}) => Object.entries(want).every(([k, v]) => Object.hasOwn(obj, k) && same(obj[k], v));
+
+// Deep equality, as lenient as Ansible: one-item lists equal their item (notify: [x] is notify: x), and a k=v string
+// ("yes", "1000") equals the boolean or number it converts to.
+function same(a, want) {
+  const one = (v) => Array.isArray(v) && v.length === 1 ? v[0] : v;
+  [a, want] = [one(a), one(want)];
+  if (typeof a === 'string' && typeof want === 'boolean') return (want ? /^(1|y|yes|on|t|true)$/i : /^(0|n|no|off|f|false)$/i).test(a);
+  if (typeof a === 'string' && typeof want === 'number') return a.trim() !== '' && Number(a) === want;
+  if (Array.isArray(a) && Array.isArray(want)) return a.length === want.length && a.every((x, i) => same(x, want[i]));
+  if (isMap(a) && isMap(want)) return Object.keys(a).length === Object.keys(want).length && has(a, want);
+  return a === want;
 }
 
 function parse(src, registry, kw) {
@@ -132,7 +201,7 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
   if (cands.length && 'args' in t && extra !== null && !isMap(extra) && !(typeof extra === 'string' && /^\{\{[\s\S]*\}\}$/.test(extra))) {
     return err('The value of the task `args` keyword is invalid.', at(child(tnode, 'args')?.value ?? tnode), 'A mapping or template which resolves to a mapping is required.');
   }
-  let mod, args;
+  let mod, args, raw;
   for (const k of cands) {
     const v = t[k];
     if (mod !== undefined) return err(`conflicting action statements: ${mod}, ${k}`, at(tnode));
@@ -144,6 +213,7 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
       if (v !== null && typeof v !== 'string' && !isMap(v)) return err(`unexpected parameter type in action: ${pyType(v)}`, at(tnode));
       [mod, args] = [k, v ?? {}];
     }
+    raw = v;
   }
   if (mod === undefined) return err('no module/action detected in task.', at(tnode));
   const module = mod.includes('.') ? mod : `ansible.builtin.${mod}`;
@@ -153,23 +223,107 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
   if ('vars' in t && t.vars !== null && !isMap(t.vars)) {
     return err(`Vars in a ${handler ? 'Handler' : 'Task'} must be specified as a dictionary.`, ctx(t.vars, child(tnode, 'vars')?.value ?? tnode));
   }
-  // k=v strings stay raw for Task 4 (which also merges the `args` keyword into them); the keyword itself stays in keywords.
-  if (isMap(args)) args = { ...(isMap(extra) ? extra : {}), ...args };
+  if (typeof args === 'string') {
+    args = parseKv(args, spec.freeform);
+    if (!args) return err(`Error loading tasks: failed at splitting arguments, either an unbalanced jinja2 block or quotes: ${raw}`, at(tnode));
+  }
+  args = { ...(isMap(extra) ? extra : {}), ...args }; // the `args` keyword stays in keywords too
   const keywords = Object.fromEntries(Object.entries(t).filter(([k]) => k !== 'name' && !cands.includes(k)));
   if ('local_action' in t) keywords.delegate_to = 'localhost';
   // action: the module as written, which Ansible's TASK banner shows for an unnamed task.
   const task = { ...('name' in t && { name: t.name }), module, action: mod, args, keywords };
 
+  if ('_raw_params' in args && !spec.freeform) {
+    // A lone "{{ var }}" is the variable params of a mapping, which the simulator cannot see; anything else is rejected before the module runs.
+    if (/^\{\{[\s\S]*\}\}$/.test(args._raw_params)) delete args._raw_params;
+    else task.unsupported = `Action '${module}' does not support raw params.`;
+  }
   // Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
   // The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
-  if (isMap(args)) {
+  if (!task.unsupported) {
     const [, names, aliases = ''] = /^(.*?)(?: \((.*)\))?\.$/.exec(spec.supported);
     const legal = new Set([...spec.params, ...Object.keys(spec.aliases), ...`${names}, ${aliases}`.split(', ')]);
     const bad = Object.keys(args).filter((k) => !legal.has(k)).sort();
     const ran = spec.reports_as[mod.includes('.') ? 'fqcn' : 'short'];
     if (bad.length) task.unsupported = `Unsupported parameters for (${ran}) module: ${bad.join(', ')}. Supported parameters include: ${spec.supported}`;
   }
+  // Aliases are accepted by Ansible; checks compare canonical names.
+  for (const [alias, name] of Object.entries(spec.aliases)) {
+    if (alias in args) { args[name] ??= args[alias]; delete args[alias]; }
+  }
   return task;
+}
+
+// ---- Free-form k=v arguments (ansible/parsing/splitter.py: split_args, parse_kv, join_args) ------------------------
+// Ported line for line, since the whitespace, quote and {{ }} rules decide what a learner's `msg="hello world"` means.
+// ponytail: \N{name} escapes are not decoded (needs the Unicode name table).
+const RAW_KEYS = ['creates', 'removes', 'chdir', 'executable', 'warn', 'stdin', 'stdin_add_newline', 'strip_empty_ends'];
+const ESCAPES = { '\\': '\\', "'": "'", '"': '"', a: '\x07', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v' };
+
+// A task's arg string as a mapping, or undefined when its quotes or jinja2 blocks do not balance.
+function parseKv(args, checkRaw) {
+  const parts = splitArgs(args);
+  if (!parts) return undefined;
+  const options = [], raw = [];
+  for (const orig of parts) {
+    const x = orig.replace(/\\(?:U([0-9a-fA-F]{8})|u([0-9a-fA-F]{4})|x([0-9a-fA-F]{2})|([\\'"abfnrtv]))/g,
+      (_, U, u, h, c) => c ? ESCAPES[c] : String.fromCodePoint(parseInt(U ?? u ?? h, 16)));
+    let pos = 0;
+    do pos = x.indexOf('=', pos + 1); while (pos > 0 && x[pos - 1] === '\\');
+    if (pos < 0) { raw.push(x.includes('=') ? x.replaceAll('\\=', '=') : orig); continue; }
+    const k = x.slice(0, pos), v = x.slice(pos + 1).trim();
+    if (checkRaw && !RAW_KEYS.includes(k)) raw.push(orig);
+    else options.push([k.trim(), v.length > 1 && v[0] === v.at(-1) && '"\''.includes(v[0]) && v.at(-2) !== '\\' ? v.slice(1, -1) : v]);
+  }
+  if (raw.length) options.push(['_raw_params', raw.reduce((r, p) => !r || r.endsWith('\n') ? r + p : `${r} ${p}`, '')]);
+  return Object.fromEntries(options);
+}
+
+function splitArgs(args) {
+  const params = [], items = args.split('\n');
+  const end = () => params.length - 1;
+  const depth = (tok, d, open, close) => {
+    const o = tok.split(open).length - 1, c = tok.split(close).length - 1;
+    return o === c ? d : Math.max(0, d + o - c);
+  };
+  let quote = null, inside = false, print = 0, block = 0, comment = 0;
+  for (const [itemIdx, item] of items.entries()) {
+    let continued = false;
+    for (const [idx, token] of item.split(' ').entries()) {
+      if (token === '' && idx !== 0) { // subsequent spaces are kept so the text can be rebuilt
+        if (!params.length) params.push('');
+        params[end()] += ' ';
+        continue;
+      }
+      if (token === '\\' && !inside) { continued = true; continue; }
+      const was = inside;
+      for (let i = 0; i < token.length; i++) { // _get_quote_state
+        const ch = token[i];
+        if ((ch === '"' || ch === "'") && token[i - 1] !== '\\') quote = !quote ? ch : ch === quote ? null : quote;
+      }
+      inside = quote !== null;
+      let appended = false;
+      if (inside && !was && !(print || block || comment)) { params.push(token); appended = true; }
+      else if (print || block || comment || inside || was) {
+        params[end()] += `${idx > 0 ? ' ' : ''}${token}`;
+        appended = true;
+      }
+      const track = (d, open, close) => {
+        const n = depth(token, d, open, close);
+        if (n !== d && !appended) { params.push(token); appended = true; }
+        return n;
+      };
+      print = track(print, '{{', '}}');
+      block = track(block, '{%', '%}');
+      comment = track(comment, '{#', '#}');
+      if (!(print || block || comment) && !inside && !appended && token !== '') params.push(token);
+    }
+    if (items.length > 1 && itemIdx !== items.length - 1 && !continued) { // keep the newline between lines
+      if (!params.length) params.push('');
+      params[end()] += '\n';
+    }
+  }
+  return print || block || comment || inside ? undefined : params;
 }
 
 // ---- YAML errors -------------------------------------------------------------------------------------------------

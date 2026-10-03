@@ -53,6 +53,10 @@ for m in MODULES:
     # between the short and the FQCN spelling, so both are recorded.
     (short, _), (long, out[fq]["supported"]) = unsupported(m, m), unsupported(m, fq)
     out[fq]["reports_as"] = {"short": short, "fqcn": long}
+# package and service are action plugins that run dnf / systemd_service (reports_as, and the borrowed "supported" text), so
+# they accept those modules' aliases too: `package: pkg=nginx` is `name`. Checks compare canonical names.
+for m, backend in {"package": "dnf", "service": "systemd_service"}.items():
+    out["ansible.builtin." + m]["aliases"] |= out["ansible.builtin." + backend]["aliases"]
 (root / "modules.yaml").write_text(yaml.safe_dump(out, sort_keys=False, width=1000))
 
 # Keyword sets, read from the real classes (2.21.4), not from memory. Written to keywords.yaml.

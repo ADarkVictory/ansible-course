@@ -1,0 +1,8 @@
+[ERROR]: Error loading tasks: failed at splitting arguments, either an unbalanced jinja2 block or quotes: msg="hello world
+Origin: /home/student/playbook.yml:3:7
+
+1 - hosts: web
+2   tasks:
+3     - name: Say hello
+        ^ column 7
+

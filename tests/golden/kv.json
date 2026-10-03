@@ -1,0 +1,296 @@
+[
+ {
+  "in": "name=nginx state=present",
+  "kv": {
+   "name": "nginx",
+   "state": "present"
+  },
+  "freeform": {
+   "_raw_params": "name=nginx state=present"
+  }
+ },
+ {
+  "in": "msg=\"hello world\"",
+  "kv": {
+   "msg": "hello world"
+  },
+  "freeform": {
+   "_raw_params": "msg=\"hello world\""
+  }
+ },
+ {
+  "in": "msg='a b' x=1",
+  "kv": {
+   "msg": "a b",
+   "x": "1"
+  },
+  "freeform": {
+   "_raw_params": "msg='a b' x=1"
+  }
+ },
+ {
+  "in": "echo hi",
+  "kv": {
+   "_raw_params": "echo hi"
+  },
+  "freeform": {
+   "_raw_params": "echo hi"
+  }
+ },
+ {
+  "in": "echo hi creates=/x",
+  "kv": {
+   "creates": "/x",
+   "_raw_params": "echo hi"
+  },
+  "freeform": {
+   "creates": "/x",
+   "_raw_params": "echo hi"
+  }
+ },
+ {
+  "in": "uptime",
+  "kv": {
+   "_raw_params": "uptime"
+  },
+  "freeform": {
+   "_raw_params": "uptime"
+  }
+ },
+ {
+  "in": "a=b=c",
+  "kv": {
+   "a": "b=c"
+  },
+  "freeform": {
+   "_raw_params": "a=b=c"
+  }
+ },
+ {
+  "in": "msg=\"a \\\"b\\\" c\"",
+  "kv": {
+   "msg": "a \"b\" c"
+  },
+  "freeform": {
+   "_raw_params": "msg=\"a \\\"b\\\" c\""
+  }
+ },
+ {
+  "in": "cmd=x  y=2",
+  "kv": {
+   "cmd": "x",
+   "y": "2"
+  },
+  "freeform": {
+   "_raw_params": "cmd=x  y=2"
+  }
+ },
+ {
+  "in": "x={{ foo }} y=\"{{ a b }}\"",
+  "kv": {
+   "x": "{{ foo }}",
+   "y": "{{ a b }}"
+  },
+  "freeform": {
+   "_raw_params": "x={{ foo }} y=\"{{ a b }}\""
+  }
+ },
+ {
+  "in": "echo  two  spaces",
+  "kv": {
+   "_raw_params": "echo  two  spaces"
+  },
+  "freeform": {
+   "_raw_params": "echo  two  spaces"
+  }
+ },
+ {
+  "in": "k=",
+  "kv": {
+   "k": ""
+  },
+  "freeform": {
+   "_raw_params": "k="
+  }
+ },
+ {
+  "in": "=v",
+  "kv": {
+   "_raw_params": "=v"
+  },
+  "freeform": {
+   "_raw_params": "=v"
+  }
+ },
+ {
+  "in": "a\\=b c=d",
+  "kv": {
+   "c": "d",
+   "_raw_params": "a=b"
+  },
+  "freeform": {
+   "_raw_params": "a=b c=d"
+  }
+ },
+ {
+  "in": "chdir=/tmp ls -l",
+  "kv": {
+   "chdir": "/tmp",
+   "_raw_params": "ls -l"
+  },
+  "freeform": {
+   "chdir": "/tmp",
+   "_raw_params": "ls -l"
+  }
+ },
+ {
+  "in": "path=\"/tmp/a b\" mode=0644",
+  "kv": {
+   "path": "/tmp/a b",
+   "mode": "0644"
+  },
+  "freeform": {
+   "_raw_params": "path=\"/tmp/a b\" mode=0644"
+  }
+ },
+ {
+  "in": "msg=it's",
+  "kv": null,
+  "freeform": null
+ },
+ {
+  "in": "msg=\"hello world",
+  "kv": null,
+  "freeform": null
+ },
+ {
+  "in": "x={{ foo",
+  "kv": null,
+  "freeform": null
+ },
+ {
+  "in": "echo \"a b\" c=d",
+  "kv": {
+   "c": "d",
+   "_raw_params": "echo \"a b\""
+  },
+  "freeform": {
+   "_raw_params": "echo \"a b\" c=d"
+  }
+ },
+ {
+  "in": "ls\n-l\ncreates=/x",
+  "kv": {
+   "creates": "/x",
+   "_raw_params": "ls\n-l\n"
+  },
+  "freeform": {
+   "creates": "/x",
+   "_raw_params": "ls\n-l\n"
+  }
+ },
+ {
+  "in": "a=1 \\\n b=2",
+  "kv": {
+   "a": "1",
+   "b": "2"
+  },
+  "freeform": {
+   "_raw_params": "a=1 b=2"
+  }
+ },
+ {
+  "in": "msg='it''s'",
+  "kv": {
+   "msg": "it''s"
+  },
+  "freeform": {
+   "_raw_params": "msg='it''s'"
+  }
+ },
+ {
+  "in": "k=\"v\"x",
+  "kv": {
+   "k": "\"v\"x"
+  },
+  "freeform": {
+   "_raw_params": "k=\"v\"x"
+  }
+ },
+ {
+  "in": "name = nginx",
+  "kv": {
+   "_raw_params": "name = nginx"
+  },
+  "freeform": {
+   "_raw_params": "name = nginx"
+  }
+ },
+ {
+  "in": "echo hi > /tmp/x",
+  "kv": {
+   "_raw_params": "echo hi > /tmp/x"
+  },
+  "freeform": {
+   "_raw_params": "echo hi > /tmp/x"
+  }
+ },
+ {
+  "in": "cmd=\"echo \\x41\\n\"",
+  "kv": {
+   "cmd": "echo A\n"
+  },
+  "freeform": {
+   "_raw_params": "cmd=\"echo \\x41\\n\""
+  }
+ },
+ {
+  "in": "x='a \"b\" c'",
+  "kv": {
+   "x": "a \"b\" c"
+  },
+  "freeform": {
+   "_raw_params": "x='a \"b\" c'"
+  }
+ },
+ {
+  "in": "say \"hi there\" now",
+  "kv": {
+   "_raw_params": "say \"hi there\" now"
+  },
+  "freeform": {
+   "_raw_params": "say \"hi there\" now"
+  }
+ },
+ {
+  "in": "removes=/a b=c d",
+  "kv": {
+   "removes": "/a",
+   "b": "c",
+   "_raw_params": "d"
+  },
+  "freeform": {
+   "removes": "/a",
+   "_raw_params": "b=c d"
+  }
+ },
+ {
+  "in": "k={% if x %}a b{% endif %}",
+  "kv": {
+   "k": "{% if x %}a",
+   "_raw_params": "b{% endif %}"
+  },
+  "freeform": {
+   "_raw_params": "k={% if x %}a b{% endif %}"
+  }
+ },
+ {
+  "in": "msg=\"tab\\there\"",
+  "kv": {
+   "msg": "tab\there"
+  },
+  "freeform": {
+   "_raw_params": "msg=\"tab\\there\""
+  }
+ }
+]

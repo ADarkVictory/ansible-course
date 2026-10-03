@@ -22,7 +22,7 @@ mkdir -p "$out"
 cd /home/student || exit 1
 
 for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param unknown-play-keyword task-keyword-typo \
-         yaml-colon yaml-unclosed-quote yaml-dedent yaml-mapping-values no-action task-not-a-dict hosts-missing \
+         yaml-colon yaml-unclosed-quote yaml-dedent yaml-mapping-values no-action task-not-a-dict hosts-missing args-unbalanced-quote \
          run-sample run-sample-second run-no-facts run-idempotency run-idempotency-second adhoc-ping; do
   src=${f%-second}
   [ "$src" != "$f" ] || rm -rf /tmp/web1 /tmp/web2   # fresh hosts; the second run must see the first run's state
@@ -34,4 +34,5 @@ for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param 
   fi
 done
 rm -f /home/student/playbook.yml
+"$root/.venv/bin/python" "$root/tools/gen-kv.py" > "$out/kv.json"
 exit 0

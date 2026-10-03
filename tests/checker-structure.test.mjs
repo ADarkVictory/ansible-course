@@ -107,13 +107,13 @@ test('run-sample parses into plays with FQCN modules, args and keywords', () => 
         { name: 'Write a file', module: 'ansible.builtin.copy', action: 'ansible.builtin.copy', line: 12, col: 7,
           args: { content: 'Hello from {{ inventory_hostname }}\n', dest: '/tmp/{{ inventory_hostname }}/hello.txt', mode: '0644' },
           keywords: { notify: 'Say hello' } },
-        { name: 'Run a command', module: 'ansible.builtin.command', action: 'ansible.builtin.command', line: 18, col: 7, args: 'uptime', keywords: {} },
+        { name: 'Run a command', module: 'ansible.builtin.command', action: 'ansible.builtin.command', line: 18, col: 7, args: { _raw_params: 'uptime' }, keywords: {} },
       ],
     }],
   });
 });
 
-test('short names expand to FQCN; k=v strings stay raw for Task 4; args keyword merges under module args', () => {
+test('short names expand to FQCN; k=v strings become args; args keyword merges under module args', () => {
   const { plays } = parse([
     '- hosts: web',
     '  become: yes',
@@ -138,7 +138,7 @@ test('short names expand to FQCN; k=v strings stay raw for Task 4; args keyword 
   assert.deepEqual(play.handlers, []);
   assert.deepEqual(play.tasks, [
     { module: 'ansible.builtin.dnf', action: 'dnf', line: 5, col: 7, args: { name: 'nginx' }, keywords: { when: 'ansible_os_family == "RedHat"', register: 'out' } },
-    { module: 'ansible.builtin.copy', action: 'copy', line: 9, col: 7, args: 'src=a dest=b', keywords: {} },
+    { module: 'ansible.builtin.copy', action: 'copy', line: 9, col: 7, args: { src: 'a', dest: 'b' }, keywords: {} },
     { module: 'ansible.builtin.ping', action: 'ping', line: 10, col: 7, args: {}, keywords: {} },
     { module: 'ansible.builtin.service', action: 'service', line: 11, col: 7, args: { state: 'started', name: 'nginx' }, keywords: { args: { state: 'started', name: 'ignored' } } },
   ]);
