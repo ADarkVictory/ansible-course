@@ -3,6 +3,7 @@ ansible.builtin.ping:
   - data
   aliases: {}
   freeform: false
+  supported: data.
 ansible.builtin.command:
   params:
   - argv
@@ -16,6 +17,7 @@ ansible.builtin.command:
   - strip_empty_ends
   aliases: {}
   freeform: true
+  supported: _raw_params, _uses_shell, argv, chdir, cmd, creates, executable, expand_argument_vars, removes, stdin, stdin_add_newline, strip_empty_ends.
 ansible.builtin.shell:
   params:
   - chdir
@@ -27,6 +29,7 @@ ansible.builtin.shell:
   - stdin_add_newline
   aliases: {}
   freeform: true
+  supported: _raw_params, _uses_shell, argv, chdir, cmd, creates, executable, expand_argument_vars, removes, stdin, stdin_add_newline, strip_empty_ends.
 ansible.builtin.copy:
   params:
   - attributes
@@ -53,6 +56,7 @@ ansible.builtin.copy:
   aliases:
     attr: attributes
   freeform: false
+  supported: _original_basename, attributes, backup, checksum, content, dest, directory_mode, follow, force, group, local_follow, mode, owner, remote_src, selevel, serole, setype, seuser, src, unsafe_writes, validate (attr).
 ansible.builtin.file:
   params:
   - access_time
@@ -79,6 +83,7 @@ ansible.builtin.file:
     dest: path
     name: path
   freeform: false
+  supported: _diff_peek, _original_basename, access_time, access_time_format, attributes, follow, force, group, mode, modification_time, modification_time_format, owner, path, recurse, selevel, serole, setype, seuser, src, state, unsafe_writes (attr, dest, name).
 ansible.builtin.user:
   params:
   - append
@@ -125,6 +130,7 @@ ansible.builtin.user:
     createhome: create_home
     user: name
   freeform: false
+  supported: append, authorization, comment, create_home, expires, force, generate_ssh_key, group, groups, hidden, home, local, login_class, move_home, name, non_unique, password, password_expire_account_disable, password_expire_max, password_expire_min, password_expire_warn, password_lock, profile, remove, role, seuser, shell, skeleton, ssh_key_bits, ssh_key_comment, ssh_key_file, ssh_key_passphrase, ssh_key_type, state, system, uid, uid_max, uid_min, umask, update_password (createhome, user).
 ansible.builtin.group:
   params:
   - force
@@ -138,6 +144,7 @@ ansible.builtin.group:
   - system
   aliases: {}
   freeform: false
+  supported: force, gid, gid_max, gid_min, local, name, non_unique, state, system.
 ansible.builtin.dnf:
   params:
   - allow_downgrade
@@ -175,6 +182,7 @@ ansible.builtin.dnf:
     pkg: name
     expire-cache: update_cache
   freeform: false
+  supported: allow_downgrade, allowerasing, autoremove, best, bugfix, cacheonly, conf_file, disable_excludes, disable_gpg_check, disable_plugin, disablerepo, download_dir, download_only, enable_plugin, enablerepo, exclude, install_weak_deps, installroot, list, lock_timeout, name, nobest, releasever, security, skip_broken, sslverify, state, update_cache, update_only, use_backend, validate_certs (expire-cache, pkg).
 ansible.builtin.apt:
   params:
   - allow_change_held_packages
@@ -213,6 +221,7 @@ ansible.builtin.apt:
     pkg: name
     update-cache: update_cache
   freeform: false
+  supported: allow_change_held_packages, allow_downgrade, allow_unauthenticated, auto_install_module_deps, autoclean, autoremove, cache_valid_time, clean, deb, default_release, dpkg_options, fail_on_autoremove, force, force_apt_get, install_recommends, lock_timeout, only_upgrade, package, policy_rc_d, purge, state, update_cache, update_cache_retries, update_cache_retry_max_delay, upgrade (allow-downgrade, allow-downgrades, allow-unauthenticated, allow_downgrades, default-release, install-recommends, name, pkg, update-cache).
 ansible.builtin.package:
   params:
   - name
@@ -250,6 +259,7 @@ ansible.builtin.systemd_service:
     service: name
     unit: name
   freeform: false
+  supported: daemon_reexec, daemon_reload, enabled, force, masked, name, no_block, scope, state (daemon-reexec, daemon-reload, service, unit).
 ansible.builtin.lineinfile:
   params:
   - attributes
@@ -282,6 +292,7 @@ ansible.builtin.lineinfile:
     name: path
     regex: regexp
   freeform: false
+  supported: attributes, backrefs, backup, create, encoding, firstmatch, group, insertafter, insertbefore, line, mode, owner, path, regexp, search_string, selevel, serole, setype, seuser, state, unsafe_writes, validate (attr, dest, destfile, name, regex, value).
 ansible.builtin.template:
   params:
   - attributes
@@ -312,6 +323,7 @@ ansible.builtin.template:
   aliases:
     attr: attributes
   freeform: false
+  supported: _original_basename, attributes, backup, checksum, content, dest, directory_mode, follow, force, group, local_follow, mode, owner, remote_src, selevel, serole, setype, seuser, src, unsafe_writes, validate (attr).
 ansible.builtin.debug:
   params:
   - msg
@@ -319,6 +331,7 @@ ansible.builtin.debug:
   - verbosity
   aliases: {}
   freeform: false
+  supported: msg, var, verbosity.
 ansible.builtin.setup:
   params:
   - fact_path
@@ -327,3 +340,4 @@ ansible.builtin.setup:
   - gather_timeout
   aliases: {}
   freeform: false
+  supported: fact_path, filter, gather_subset, gather_timeout.
