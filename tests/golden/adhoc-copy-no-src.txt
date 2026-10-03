@@ -1,0 +1,13 @@
+[ERROR]: Task failed: Action failed: src (or content) is required
+Origin: <adhoc 'copy' task>
+
+{'action': 'copy', 'args': {'dest': '/tmp/app.conf'}, 'timeout': 0, 'async_val': 0, 'poll': 15}
+
+web1 | FAILED! => {
+    "changed": false,
+    "msg": "src (or content) is required"
+}
+web2 | FAILED! => {
+    "changed": false,
+    "msg": "src (or content) is required"
+}

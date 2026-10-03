@@ -1,0 +1,7 @@
+[WARNING]: Skipping unexpected key (1) in group (web), only "vars", "children" and "hosts" are valid
+[WARNING]: Skipping key (2) in group (web) as it is not a mapping, it is a <class 'ansible.module_utils._internal._datatag._AnsibleTaggedStr'>
+[WARNING]: Skipping '7' as this is not a valid group definition
+@all:
+  |--@ungrouped:
+  |--@web:
+  |  |--web1

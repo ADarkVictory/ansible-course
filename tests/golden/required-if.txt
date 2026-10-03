@@ -1,0 +1,19 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Add deploy to more groups] ***********************************************
+[ERROR]: Task failed: Module failed: append is True but all of the following are missing: groups
+Origin: /home/student/playbook.yml:4:7
+
+2   gather_facts: false
+3   tasks:
+4     - name: Add deploy to more groups
+        ^ column 7
+
+fatal: [web1]: FAILED! => {"changed": false, "msg": "append is True but all of the following are missing: groups"}
+fatal: [web2]: FAILED! => {"changed": false, "msg": "append is True but all of the following are missing: groups"}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+web2                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

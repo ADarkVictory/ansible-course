@@ -1,0 +1,35 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [web1]
+ok: [web2]
+
+TASK [Install nginx] ***********************************************************
+[ERROR]: Task failed: Action 'ansible.builtin.dnf' does not support raw params.
+
+Task failed.
+Origin: /home/student/playbook.yml:3:7
+
+1 - hosts: web
+2   tasks:
+3     - name: Install nginx
+        ^ column 7
+
+<<< caused by >>>
+
+Action 'ansible.builtin.dnf' does not support raw params.
+Origin: /home/student/playbook.yml:4:7
+
+2   tasks:
+3     - name: Install nginx
+4       ansible.builtin.dnf: nginx
+        ^ column 7
+
+fatal: [web1]: FAILED! => {"changed": false, "msg": "Task failed: Action 'ansible.builtin.dnf' does not support raw params."}
+fatal: [web2]: FAILED! => {"changed": false, "msg": "Task failed: Action 'ansible.builtin.dnf' does not support raw params."}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=1    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+web2                       : ok=1    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

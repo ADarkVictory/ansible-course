@@ -1,0 +1,5 @@
+- hosts: web
+  tasks:
+    - name: Ping
+      action: ansible.builtin.ping
+      local_action: ansible.builtin.ping

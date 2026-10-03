@@ -1,0 +1,8 @@
+[ERROR]: YAML parsing failed: While parsing a block mapping did not find expected key.
+Origin: /home/student/playbook.yml:6:8
+
+4       ansible.builtin.dnf:
+5         name: nginx
+6        state: present
+         ^ column 8
+

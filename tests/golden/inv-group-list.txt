@@ -1,0 +1,5 @@
+[WARNING]: Skipping 'web' as this is not a valid group definition
+@all:
+  |--@ungrouped:
+  |--@db:
+  |  |--db1

@@ -1,0 +1,22 @@
+[ERROR]: Task failed: Action 'ansible.builtin.ping' does not support raw params.
+
+Task failed.
+Origin: <adhoc 'ping' task>
+
+{'action': 'ping', 'args': {'_raw_params': 'hello'}, 'timeout': 0, 'async_val': 0, 'poll': 15}
+
+<<< caused by >>>
+
+Action 'ansible.builtin.ping' does not support raw params.
+Origin: <CLI option '-m'>
+
+ping
+
+web1 | FAILED! => {
+    "changed": false,
+    "msg": "Task failed: Action 'ansible.builtin.ping' does not support raw params."
+}
+web2 | FAILED! => {
+    "changed": false,
+    "msg": "Task failed: Action 'ansible.builtin.ping' does not support raw params."
+}

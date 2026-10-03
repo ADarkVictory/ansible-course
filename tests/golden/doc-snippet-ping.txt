@@ -1,0 +1,7 @@
+- name: Try to connect to host, verify a usable python and return `pong' on success
+  ping:
+      data:                  # Data to return for the `ping' return value. If
+                             # this parameter is
+                             # set to `crash', the
+                             # module will cause
+                             # an exception.

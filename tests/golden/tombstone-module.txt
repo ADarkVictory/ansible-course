@@ -1,0 +1,8 @@
+[ERROR]: The 'ansible.builtin.bigip_facts' module has been removed. bigip_facts has been removed please use bigip_device_info module. This feature was removed from ansible-core in a release after 2019-11-06.
+Origin: /home/student/playbook.yml:3:7
+
+1 - hosts: web
+2   tasks:
+3     - name: Collect facts
+        ^ column 7
+

@@ -1,0 +1,19 @@
+- name: "Deploy {{ app }}"
+  hosts: web
+  gather_facts: false
+  vars:
+    app: shop
+    app_port: 8080
+    debug_on: true
+  tasks:
+    - name: "Configure {{ app }} on {{ inventory_hostname }}"
+      ansible.builtin.debug:
+        msg: "{{ app }} listens on {{ app_port }}, debug {{ debug_on }}"
+    - name: Show the app port
+      ansible.builtin.debug:
+        msg: "{{ app_port }}"
+    - name: Show the app
+      ansible.builtin.debug:
+        var: app
+      vars:
+        app: cart

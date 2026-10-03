@@ -1,0 +1,11 @@
+- name: Prepare the app server
+  hosts: web1
+  gather_facts: false
+  tasks:
+    - name: Ensure the app directory exists
+      ansible.builtin.file:
+        path: /tmp/app
+        state: directory
+        mode: "0755"
+    - name: Log the deployment
+      ansible.builtin.shell: echo deployed >> /tmp/app/deploy.log

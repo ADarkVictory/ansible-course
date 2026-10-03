@@ -1,0 +1,12 @@
+web-a:
+  foo: bar
+  hosts:
+    web1:
+    db:
+db:
+  hosts:
+    db1:
+web-b:
+  foo: 3
+  bar:
+    x: 1

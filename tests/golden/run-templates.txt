@@ -1,0 +1,31 @@
+
+PLAY [Deploy shop] *************************************************************
+
+TASK [Configure shop on web1] **************************************************
+ok: [web1] => {
+    "msg": "shop listens on 8080, debug True"
+}
+ok: [web2] => {
+    "msg": "shop listens on 8080, debug True"
+}
+
+TASK [Show the app port] *******************************************************
+ok: [web1] => {
+    "msg": 8080
+}
+ok: [web2] => {
+    "msg": 8080
+}
+
+TASK [Show the app] ************************************************************
+ok: [web1] => {
+    "app": "cart"
+}
+ok: [web2] => {
+    "app": "cart"
+}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+web2                       : ok=3    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+

@@ -1,0 +1,20 @@
+@all:
+  |--@ungrouped:
+  |  |--bastion1
+  |--@web:
+  |  |--web1
+  |  |--web2
+  |--@db:
+  |  |--db1
+  |--@prod:
+  |  |--@web:
+  |  |  |--web1
+  |  |  |--web2
+  |  |--@db:
+  |  |  |--db1
+  |--@staging:
+  |  |--web3
+  |  |--db1
+  |--@monitoring:
+  |--@lb:
+  |  |--lb1

@@ -1,0 +1,5 @@
+- hosts: web
+  tasks:
+    - name: Show a message
+      ansible.builtin.debug:
+        msg: Error: disk full

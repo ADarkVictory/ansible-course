@@ -1,0 +1,36 @@
+[WARNING]: Failed to parse inventory with 'auto' plugin: YAML parsing failed: Tabs are usually invalid in YAML.
+
+Failed to parse inventory with 'auto' plugin.
+
+<<< caused by >>>
+
+YAML parsing failed: Tabs are usually invalid in YAML.
+Origin: /home/student/inventory.yml:4:1
+
+2   hosts:
+3     web1:
+4  web2:
+  ^ column 1
+
+[WARNING]: Failed to parse inventory with 'yaml' plugin: YAML parsing failed: Tabs are usually invalid in YAML.
+
+Failed to parse inventory with 'yaml' plugin.
+
+<<< caused by >>>
+
+YAML parsing failed: Tabs are usually invalid in YAML.
+Origin: <inventory plugin 'yaml' with source '/home/student/inventory.yml'>
+
+[WARNING]: Failed to parse inventory with 'ini' plugin: Failed to parse inventory: Invalid host pattern 'web:' supplied, ending in ':' is not allowed, this character is reserved to provide a port.
+
+Failed to parse inventory with 'ini' plugin.
+
+<<< caused by >>>
+
+Failed to parse inventory: Invalid host pattern 'web:' supplied, ending in ':' is not allowed, this character is reserved to provide a port.
+Origin: /home/student/inventory.yml
+
+[WARNING]: Unable to parse /home/student/inventory.yml as an inventory source
+[WARNING]: No inventory was parsed, only implicit localhost is available
+@all:
+  |--@ungrouped:

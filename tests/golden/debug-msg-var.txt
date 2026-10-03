@@ -1,0 +1,19 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Show it] *****************************************************************
+[ERROR]: Task failed: parameters are mutually exclusive: msg|var
+Origin: /home/student/playbook.yml:4:7
+
+2   gather_facts: false
+3   tasks:
+4     - name: Show it
+        ^ column 7
+
+fatal: [web1]: FAILED! => {"msg": "parameters are mutually exclusive: msg|var"}
+fatal: [web2]: FAILED! => {"msg": "parameters are mutually exclusive: msg|var"}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+web2                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

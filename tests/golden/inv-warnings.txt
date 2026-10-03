@@ -1,0 +1,13 @@
+[WARNING]: Invalid characters were found in group names but not replaced, use -vvvv to see details
+[WARNING]: Skipping key (foo) in group (web-a) as it is not a mapping, it is a <class 'ansible.module_utils._internal._datatag._AnsibleTaggedStr'>
+[WARNING]: Skipping key (foo) in group (web-b) as it is not a mapping, it is a <class 'ansible.module_utils._internal._datatag._AnsibleTaggedInt'>
+[WARNING]: Skipping unexpected key (bar) in group (web-b), only "vars", "children" and "hosts" are valid
+[WARNING]: Found both group and host with same name: db
+@all:
+  |--@ungrouped:
+  |--@web-a:
+  |  |--web1
+  |  |--db
+  |--@db:
+  |  |--db1
+  |--@web-b:

@@ -1,0 +1,17 @@
+[ERROR]: YAML parsing failed: Colons in unquoted values must be followed by a non-space character.
+Origin: /home/student/playbook.yml:5:19
+
+3     - name: Show a message
+4       ansible.builtin.debug:
+5         msg: Error: disk full
+                    ^ column 19
+
+
+For example:
+
+    raw: echo 'name: ansible'
+
+Should be:
+
+    raw: "echo 'name: ansible'"
+

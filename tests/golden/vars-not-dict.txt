@@ -1,0 +1,8 @@
+[ERROR]: Vars in a Play must be specified as a dictionary.
+Origin: /home/student/playbook.yml:3:5
+
+1 - hosts: web
+2   vars:
+3     - greeting: Hello
+      ^ column 5
+

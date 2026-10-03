@@ -1,0 +1,7 @@
+web:
+  hosts:
+    web1:
+  1:
+    a: b
+  2: x
+7: [a]

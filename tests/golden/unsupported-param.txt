@@ -1,0 +1,23 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [web1]
+ok: [web2]
+
+TASK [Create a directory] ******************************************************
+[ERROR]: Task failed: Module failed: Unsupported parameters for (ansible.builtin.file) module: pathh. Supported parameters include: _diff_peek, _original_basename, access_time, access_time_format, attributes, follow, force, group, mode, modification_time, modification_time_format, owner, path, recurse, selevel, serole, setype, seuser, src, state, unsafe_writes (attr, dest, name).
+Origin: /home/student/playbook.yml:3:7
+
+1 - hosts: web
+2   tasks:
+3     - name: Create a directory
+        ^ column 7
+
+fatal: [web1]: FAILED! => {"changed": false, "msg": "Unsupported parameters for (ansible.builtin.file) module: pathh. Supported parameters include: _diff_peek, _original_basename, access_time, access_time_format, attributes, follow, force, group, mode, modification_time, modification_time_format, owner, path, recurse, selevel, serole, setype, seuser, src, state, unsafe_writes (attr, dest, name)."}
+fatal: [web2]: FAILED! => {"changed": false, "msg": "Unsupported parameters for (ansible.builtin.file) module: pathh. Supported parameters include: _diff_peek, _original_basename, access_time, access_time_format, attributes, follow, force, group, mode, modification_time, modification_time_format, owner, path, recurse, selevel, serole, setype, seuser, src, state, unsafe_writes (attr, dest, name)."}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=1    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+web2                       : ok=1    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

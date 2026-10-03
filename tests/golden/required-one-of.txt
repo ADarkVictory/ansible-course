@@ -1,0 +1,19 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Run in /tmp] *************************************************************
+[ERROR]: Task failed: Module failed: one of the following is required: _raw_params, cmd, argv
+Origin: /home/student/playbook.yml:4:7
+
+2   gather_facts: false
+3   tasks:
+4     - name: Run in /tmp
+        ^ column 7
+
+fatal: [web1]: FAILED! => {"changed": false, "msg": "one of the following is required: _raw_params, cmd, argv"}
+fatal: [web2]: FAILED! => {"changed": false, "msg": "one of the following is required: _raw_params, cmd, argv"}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+web2                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

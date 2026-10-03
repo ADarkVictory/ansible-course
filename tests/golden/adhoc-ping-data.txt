@@ -1,0 +1,8 @@
+web1 | SUCCESS => {
+    "changed": false,
+    "ping": "a b"
+}
+web2 | SUCCESS => {
+    "changed": false,
+    "ping": "a b"
+}

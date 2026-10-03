@@ -1,0 +1,4 @@
+- hosts: web
+  tasks:
+    - name: Install nginx
+      include: nginx.yml

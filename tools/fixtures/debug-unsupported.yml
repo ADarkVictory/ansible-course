@@ -1,0 +1,7 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Show it
+      ansible.builtin.debug:
+        msg: Hello
+        verbose: true

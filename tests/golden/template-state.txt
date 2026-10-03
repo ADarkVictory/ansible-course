@@ -1,0 +1,19 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Deploy the config] *******************************************************
+[ERROR]: Task failed: 'state' cannot be specified on a template
+Origin: /home/student/playbook.yml:4:7
+
+2   gather_facts: false
+3   tasks:
+4     - name: Deploy the config
+        ^ column 7
+
+fatal: [web1]: FAILED! => {"changed": false, "msg": "'state' cannot be specified on a template"}
+fatal: [web2]: FAILED! => {"changed": false, "msg": "'state' cannot be specified on a template"}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+web2                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

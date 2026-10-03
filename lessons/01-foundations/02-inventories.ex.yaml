@@ -1,0 +1,285 @@
+- id: inventories-1
+  type: choice
+  question: Which groups is `mail1` in?
+  code: |
+    mail1
+
+    [web]
+    web1
+    web2
+
+    [db]
+    db1
+  options:
+    - text: None, because it is not under a group heading
+      correct: false
+      why: Every host is in `all`. A host listed before the first heading has no group of its own, so Ansible also puts it in `ungrouped`.
+    - text: "`all` and `ungrouped`"
+      correct: true
+      why: Every host is in `all`, and a host in no other group is in `ungrouped` as well. `ansible-inventory --graph` shows `mail1` under `@ungrouped`.
+    - text: "`web`, the group below it"
+      correct: false
+      why: A group's hosts are the lines after its heading. `mail1` comes before any heading.
+    - text: Only `all`
+      correct: false
+      why: "It is in `all`, but a host in no other group is also in `ungrouped`. A play with `hosts: ungrouped` reaches exactly such hosts."
+
+- id: inventories-2
+  type: choice
+  question: "A play has `hosts: prod`. Which hosts does it run on?"
+  code: |
+    [web]
+    web1
+    web2
+
+    [db]
+    db1
+
+    [prod:children]
+    web
+    db
+  options:
+    - text: None, because `prod` lists no hosts of its own
+      correct: false
+      why: A group also holds every host of its child groups. `ansible-inventory --graph` shows `web1`, `web2` and `db1` under `@prod`.
+    - text: Two hosts named `web` and `db`
+      correct: false
+      why: That is what `[prod]` without `:children` would mean, where every line is a host. Ansible would then try to connect to machines called `web` and `db`.
+    - text: "`web1`, `web2` and `db1`"
+      correct: true
+      why: "`:children` makes `web` and `db` child groups of `prod`, so `prod` holds every host in them."
+    - text: None, because the inventory is invalid when `web1` is in both `web` and `prod`
+      correct: false
+      why: A host can be in any number of groups. Here `web1` is in `web`, `prod` and `all`.
+
+- id: inventories-3
+  type: choice
+  question: "You run a playbook with `hosts: web1` against this inventory. What happens?"
+  code: |
+    [web]
+    web1 ansible_host=10.0.0.11 ansible_user=deploy
+  options:
+    - text: Ansible connects to `10.0.0.11` as `deploy`, and the output names the host `web1`
+      correct: true
+      why: "`ansible_host` and `ansible_user` tell the connection where to log in and as whom. Everywhere else, including the output, the host is `web1`."
+    - text: Ansible connects to whatever `web1` resolves to; `ansible_host` is only a label
+      correct: false
+      why: It is the other way round. `web1` is the name Ansible uses for the host; `ansible_host` is the address SSH connects to.
+    - text: The output names the host `10.0.0.11`
+      correct: false
+      why: Output, `hosts:` and group lists use the inventory name, `web1`. Only the connection uses the address.
+    - text: The line is invalid, because variables belong in a `[web:vars]` section
+      correct: false
+      why: "`key=value` pairs after a host name are that host's variables. `[web:vars]` is for variables that every host in the group shares."
+
+- id: inventories-4
+  type: write
+  kind: inventory
+  task: "Write a YAML inventory with two groups: `app` holds the hosts `app1` and `app2`, and `cache` holds `redis1`."
+  starter: |
+    all:
+      children:
+  solution: |
+    all:
+      children:
+        app:
+          hosts:
+            app1:
+            app2:
+        cache:
+          hosts:
+            redis1:
+  checks:
+    - group: app
+      hosts: [app1, app2]
+      hint: Group app must hold exactly app1 and app2. A group's hosts go under its hosts key, as mapping keys rather than list items.
+    - group: cache
+      hosts: [redis1]
+      hint: Group cache must hold exactly redis1, under a hosts key of its own.
+  wrong:
+    - code: |
+        all:
+          children:
+            app:
+              hosts:
+                - app1
+                - app2
+            cache:
+              hosts:
+                redis1:
+      fails: 1
+    - code: |
+        all:
+          children:
+            app:
+              app1:
+              app2:
+            cache:
+              hosts:
+                redis1:
+      fails: 1
+    - code: |
+        all:
+          children:
+            app:
+              hosts:
+                app1:
+                app2:
+                cache:
+                  hosts:
+                    redis1:
+      fails: 1
+    - code: |
+        all:
+          children:
+            app:
+              hosts:
+                app1:
+                app2:
+            cache:
+              redis1:
+      fails: 2
+    - code: |
+        all:
+          children:
+            app:
+              hosts:
+                app1:
+                app2:
+              children:
+                cache:
+                  hosts:
+                    redis1:
+      fails: 1
+
+- id: inventories-5
+  type: write
+  kind: inventory
+  task: |
+    Rewrite this INI inventory in YAML, with the same groups and hosts.
+
+    ```ini
+    monitor1
+
+    [lb]
+    lb1
+
+    [api]
+    api1
+    api2
+
+    [frontend:children]
+    lb
+    api
+    ```
+  starter: |
+    all:
+  solution: |
+    all:
+      hosts:
+        monitor1:
+      children:
+        frontend:
+          children:
+            lb:
+              hosts:
+                lb1:
+            api:
+              hosts:
+                api1:
+                api2:
+  checks:
+    - group: frontend
+      children: [lb, api]
+      hint: frontend is a group of groups. Which of a group's three keys holds other groups?
+    - group: lb
+      hosts: [lb1]
+      hint: Group lb must hold exactly lb1.
+    - group: api
+      hosts: [api1, api2]
+      hint: Group api must hold exactly api1 and api2.
+    - group: ungrouped
+      hosts: [monitor1]
+      hint: monitor1 belongs to no group but all. Where does a YAML inventory put such a host?
+  wrong:
+    - code: |
+        all:
+          hosts:
+            monitor1:
+          children:
+            lb:
+              hosts:
+                lb1:
+            api:
+              hosts:
+                api1:
+                api2:
+            frontend:
+              hosts:
+                lb:
+                api:
+      fails: 1
+    - code: |
+        all:
+          hosts:
+            monitor1:
+          children:
+            lb:
+              hosts:
+                lb1:
+            api:
+              hosts:
+                api1:
+                api2:
+            frontend:
+              children:
+                - lb
+                - api
+      fails: 1
+    - code: |
+        monitor1:
+        all:
+          children:
+            frontend:
+              children:
+                lb:
+                  hosts:
+                    lb1:
+                api:
+                  hosts:
+                    api1:
+                    api2:
+      fails: 4
+    - code: |
+        all:
+          hosts:
+            monitor1:
+          children:
+            frontend:
+              hosts:
+                lb1:
+              children:
+                lb:
+                  hosts:
+                    lb1:
+                api:
+                  hosts:
+                    api1:
+                    api2:
+      fails: 1
+    - code: |
+        all:
+          hosts:
+            monitor1:
+          children:
+            frontend:
+              children:
+                lb:
+                  hosts:
+                    lb1:
+                  children:
+                    api:
+                      hosts:
+                        api1:
+                        api2:
+      fails: 1

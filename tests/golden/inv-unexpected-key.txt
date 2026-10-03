@@ -1,0 +1,3 @@
+[WARNING]: Skipping unexpected key (web) in group (all), only "vars", "children" and "hosts" are valid
+@all:
+  |--@ungrouped:

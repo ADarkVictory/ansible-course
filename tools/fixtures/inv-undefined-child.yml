@@ -1,0 +1,10 @@
+all:
+  children:
+    web:
+      hosts:
+        web1:
+    prod:
+      children:
+        web:
+        db:
+          - db1

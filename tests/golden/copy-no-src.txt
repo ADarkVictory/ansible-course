@@ -1,0 +1,19 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Copy the config] *********************************************************
+[ERROR]: Task failed: Action failed: src (or content) is required
+Origin: /home/student/playbook.yml:4:7
+
+2   gather_facts: false
+3   tasks:
+4     - name: Copy the config
+        ^ column 7
+
+fatal: [web1]: FAILED! => {"changed": false, "msg": "src (or content) is required"}
+fatal: [web2]: FAILED! => {"changed": false, "msg": "src (or content) is required"}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+web2                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

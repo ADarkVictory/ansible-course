@@ -1,0 +1,10 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Deploy config
+      ansible.builtin.command: echo deploy
+      notify: Restart nginxx
+  handlers:
+    - name: Restart nginx
+      ansible.builtin.debug:
+        msg: restarting

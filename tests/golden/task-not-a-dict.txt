@@ -1,0 +1,5 @@
+[ERROR]: A malformed block was encountered while loading block: The ds (['ansible.builtin.ping']) should be a dict but was a <class 'list'>
+Origin: <unknown>
+
+['ansible.builtin.ping']
+

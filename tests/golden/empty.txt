@@ -1,0 +1,1 @@
+[ERROR]: Empty playbook, nothing to do: /home/student/playbook.yml

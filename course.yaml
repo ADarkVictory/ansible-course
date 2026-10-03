@@ -1,0 +1,16 @@
+modules:
+  - dir: 01-foundations
+    title: Foundations
+    lessons:
+      - file: 01-what-is-ansible
+        title: What is Ansible?
+      - file: 02-inventories
+        title: Inventories
+      - file: 03-ansible-cfg
+        title: ansible.cfg
+      - file: 04-ad-hoc-commands
+        title: Ad-hoc commands
+      - file: 05-modules-and-fqcn
+        title: Modules and FQCN
+      - file: 06-checkpoint
+        title: Checkpoint

@@ -1,0 +1,8 @@
+[ERROR]: action and local_action are mutually exclusive
+Origin: /home/student/playbook.yml:3:7
+
+1 - hosts: web
+2   tasks:
+3     - name: Ping
+        ^ column 7
+

@@ -1,0 +1,31 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [web1]
+ok: [web2]
+
+TASK [Create a directory] ******************************************************
+changed: [web1]
+changed: [web2]
+
+TASK [Write a file] ************************************************************
+changed: [web1]
+changed: [web2]
+
+TASK [Run a command] ***********************************************************
+changed: [web1]
+changed: [web2]
+
+RUNNING HANDLER [Say hello] ****************************************************
+ok: [web1] => {
+    "msg": "Handler ran"
+}
+ok: [web2] => {
+    "msg": "Handler ran"
+}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=5    changed=3    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+web2                       : ok=5    changed=3    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+

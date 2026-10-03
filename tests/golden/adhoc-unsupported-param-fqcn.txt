@@ -1,0 +1,13 @@
+[ERROR]: Task failed: Module failed: Unsupported parameters for (ansible.builtin.ping) module: bogus. Supported parameters include: data.
+Origin: <adhoc 'ansible.builtin.ping' task>
+
+{'action': 'ansible.builtin.ping', 'args': {'bogus': 'x'}, 'timeout': 0, 'async_val': 0, 'poll': 15}
+
+web1 | FAILED! => {
+    "changed": false,
+    "msg": "Unsupported parameters for (ansible.builtin.ping) module: bogus. Supported parameters include: data."
+}
+web2 | FAILED! => {
+    "changed": false,
+    "msg": "Unsupported parameters for (ansible.builtin.ping) module: bogus. Supported parameters include: data."
+}

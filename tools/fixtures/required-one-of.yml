@@ -1,0 +1,6 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Run in /tmp
+      ansible.builtin.command:
+        chdir: /tmp

@@ -1,0 +1,920 @@
+ansible.builtin.ping:
+  params:
+  - data
+  aliases: {}
+  freeform: false
+  supported: data.
+  reports_as:
+    short: ping
+    fqcn: ansible.builtin.ping
+  choices: {}
+  required: []
+ansible.builtin.command:
+  params:
+  - argv
+  - chdir
+  - cmd
+  - creates
+  - expand_argument_vars
+  - removes
+  - stdin
+  - stdin_add_newline
+  - strip_empty_ends
+  aliases: {}
+  freeform: true
+  supported: _raw_params, _uses_shell, argv, chdir, cmd, creates, executable, expand_argument_vars, removes, stdin, stdin_add_newline, strip_empty_ends.
+  reports_as:
+    short: ansible.legacy.command
+    fqcn: ansible.legacy.command
+  choices: {}
+  required: []
+  mutually_exclusive:
+  - - _raw_params
+    - cmd
+    - argv
+  required_one_of:
+  - - _raw_params
+    - cmd
+    - argv
+  types:
+    _uses_shell: bool
+    expand_argument_vars: bool
+    stdin_add_newline: bool
+    strip_empty_ends: bool
+  defaults:
+    _uses_shell: false
+    expand_argument_vars: true
+    stdin_add_newline: true
+    strip_empty_ends: true
+ansible.builtin.shell:
+  params:
+  - chdir
+  - cmd
+  - creates
+  - executable
+  - removes
+  - stdin
+  - stdin_add_newline
+  aliases: {}
+  freeform: true
+  supported: _raw_params, _uses_shell, argv, chdir, cmd, creates, executable, expand_argument_vars, removes, stdin, stdin_add_newline, strip_empty_ends.
+  reports_as:
+    short: ansible.legacy.command
+    fqcn: ansible.legacy.command
+  choices: {}
+  required: []
+  mutually_exclusive:
+  - - _raw_params
+    - cmd
+    - argv
+  required_one_of:
+  - - _raw_params
+    - cmd
+    - argv
+  types:
+    _uses_shell: bool
+    expand_argument_vars: bool
+    stdin_add_newline: bool
+    strip_empty_ends: bool
+  defaults:
+    _uses_shell: false
+    expand_argument_vars: true
+    stdin_add_newline: true
+    strip_empty_ends: true
+ansible.builtin.copy:
+  params:
+  - attributes
+  - backup
+  - checksum
+  - content
+  - decrypt
+  - dest
+  - directory_mode
+  - follow
+  - force
+  - group
+  - local_follow
+  - mode
+  - owner
+  - remote_src
+  - selevel
+  - serole
+  - setype
+  - seuser
+  - src
+  - unsafe_writes
+  - validate
+  aliases:
+    attr: attributes
+  freeform: false
+  supported: _original_basename, attributes, backup, checksum, content, dest, directory_mode, follow, force, group, local_follow, mode, owner, remote_src, selevel, serole, setype, seuser, src, unsafe_writes, validate (attr).
+  reports_as:
+    short: ansible.legacy.copy
+    fqcn: ansible.legacy.copy
+  choices: {}
+  required:
+  - dest
+  types:
+    backup: bool
+    force: bool
+    remote_src: bool
+    local_follow: bool
+    follow: bool
+    unsafe_writes: bool
+  defaults:
+    backup: false
+    follow: false
+    force: true
+    remote_src: false
+    unsafe_writes: false
+ansible.builtin.file:
+  params:
+  - access_time
+  - access_time_format
+  - attributes
+  - follow
+  - force
+  - group
+  - mode
+  - modification_time
+  - modification_time_format
+  - owner
+  - path
+  - recurse
+  - selevel
+  - serole
+  - setype
+  - seuser
+  - src
+  - state
+  - unsafe_writes
+  aliases:
+    attr: attributes
+    dest: path
+    name: path
+  freeform: false
+  supported: _diff_peek, _original_basename, access_time, access_time_format, attributes, follow, force, group, mode, modification_time, modification_time_format, owner, path, recurse, selevel, serole, setype, seuser, src, state, unsafe_writes (attr, dest, name).
+  reports_as:
+    short: file
+    fqcn: ansible.builtin.file
+  choices:
+    state:
+    - absent
+    - directory
+    - file
+    - hard
+    - link
+    - touch
+  required:
+  - path
+  types:
+    recurse: bool
+    force: bool
+    follow: bool
+    _diff_peek: bool
+    unsafe_writes: bool
+  defaults:
+    follow: true
+    force: false
+    recurse: false
+    unsafe_writes: false
+ansible.builtin.user:
+  params:
+  - append
+  - authorization
+  - comment
+  - create_home
+  - expires
+  - force
+  - generate_ssh_key
+  - group
+  - groups
+  - hidden
+  - home
+  - local
+  - login_class
+  - move_home
+  - name
+  - non_unique
+  - password
+  - password_expire_account_disable
+  - password_expire_max
+  - password_expire_min
+  - password_expire_warn
+  - password_lock
+  - profile
+  - remove
+  - role
+  - seuser
+  - shell
+  - skeleton
+  - ssh_key_bits
+  - ssh_key_comment
+  - ssh_key_file
+  - ssh_key_passphrase
+  - ssh_key_type
+  - state
+  - system
+  - uid
+  - uid_max
+  - uid_min
+  - umask
+  - update_password
+  aliases:
+    createhome: create_home
+    user: name
+  freeform: false
+  supported: append, authorization, comment, create_home, expires, force, generate_ssh_key, group, groups, hidden, home, local, login_class, move_home, name, non_unique, password, password_expire_account_disable, password_expire_max, password_expire_min, password_expire_warn, password_lock, profile, remove, role, seuser, shell, skeleton, ssh_key_bits, ssh_key_comment, ssh_key_file, ssh_key_passphrase, ssh_key_type, state, system, uid, uid_max, uid_min, umask, update_password (createhome, user).
+  reports_as:
+    short: user
+    fqcn: ansible.builtin.user
+  choices:
+    state:
+    - absent
+    - present
+    update_password:
+    - always
+    - on_create
+  required:
+  - name
+  required_if:
+  - - append
+    - true
+    - - groups
+  types:
+    uid: int
+    non_unique: bool
+    password_expire_max: int
+    password_expire_min: int
+    password_expire_warn: int
+    hidden: bool
+    force: bool
+    remove: bool
+    create_home: bool
+    system: bool
+    move_home: bool
+    append: bool
+    generate_ssh_key: bool
+    ssh_key_bits: int
+    password_lock: bool
+    local: bool
+    password_expire_account_disable: int
+    uid_min: int
+    uid_max: int
+  defaults:
+    append: false
+    create_home: true
+    force: false
+    move_home: false
+    non_unique: false
+    remove: false
+    ssh_key_bits: 0
+    system: false
+ansible.builtin.group:
+  params:
+  - force
+  - gid
+  - gid_max
+  - gid_min
+  - local
+  - name
+  - non_unique
+  - state
+  - system
+  aliases: {}
+  freeform: false
+  supported: force, gid, gid_max, gid_min, local, name, non_unique, state, system.
+  reports_as:
+    short: group
+    fqcn: ansible.builtin.group
+  choices:
+    state:
+    - absent
+    - present
+  required:
+  - name
+  required_if:
+  - - non_unique
+    - true
+    - - gid
+  types:
+    force: bool
+    gid: int
+    system: bool
+    local: bool
+    non_unique: bool
+    gid_min: int
+    gid_max: int
+  defaults:
+    force: false
+    local: false
+    non_unique: false
+    system: false
+ansible.builtin.dnf:
+  params:
+  - allow_downgrade
+  - allowerasing
+  - autoremove
+  - best
+  - bugfix
+  - cacheonly
+  - conf_file
+  - disable_excludes
+  - disable_gpg_check
+  - disable_plugin
+  - disablerepo
+  - download_dir
+  - download_only
+  - enable_plugin
+  - enablerepo
+  - exclude
+  - install_weak_deps
+  - installroot
+  - list
+  - lock_timeout
+  - name
+  - nobest
+  - releasever
+  - security
+  - skip_broken
+  - sslverify
+  - state
+  - update_cache
+  - update_only
+  - use_backend
+  - validate_certs
+  aliases:
+    pkg: name
+    expire-cache: update_cache
+  freeform: false
+  supported: allow_downgrade, allowerasing, autoremove, best, bugfix, cacheonly, conf_file, disable_excludes, disable_gpg_check, disable_plugin, disablerepo, download_dir, download_only, enable_plugin, enablerepo, exclude, install_weak_deps, installroot, list, lock_timeout, name, nobest, releasever, security, skip_broken, sslverify, state, update_cache, update_only, use_backend, validate_certs (expire-cache, pkg).
+  reports_as:
+    short: ansible.legacy.dnf
+    fqcn: ansible.legacy.dnf
+  choices:
+    state:
+    - absent
+    - installed
+    - latest
+    - present
+    - removed
+  required: []
+  mutually_exclusive:
+  - - name
+    - list
+  - - best
+    - nobest
+  required_one_of:
+  - - name
+    - list
+    - update_cache
+  types:
+    allow_downgrade: bool
+    allowerasing: bool
+    autoremove: bool
+    best: bool
+    bugfix: bool
+    cacheonly: bool
+    disable_gpg_check: bool
+    download_only: bool
+    install_weak_deps: bool
+    nobest: bool
+    security: bool
+    skip_broken: bool
+    update_cache: bool
+    update_only: bool
+    validate_certs: bool
+    sslverify: bool
+    lock_timeout: int
+  defaults:
+    allow_downgrade: false
+    allowerasing: false
+    autoremove: false
+    bugfix: false
+    cacheonly: false
+    disable_gpg_check: false
+    download_only: false
+    install_weak_deps: true
+    lock_timeout: 30
+    name: []
+    security: false
+    skip_broken: false
+    sslverify: true
+    update_cache: false
+    update_only: 'no'
+    validate_certs: true
+ansible.builtin.apt:
+  params:
+  - allow_change_held_packages
+  - allow_downgrade
+  - allow_unauthenticated
+  - auto_install_module_deps
+  - autoclean
+  - autoremove
+  - cache_valid_time
+  - clean
+  - deb
+  - default_release
+  - dpkg_options
+  - fail_on_autoremove
+  - force
+  - force_apt_get
+  - install_recommends
+  - lock_timeout
+  - name
+  - only_upgrade
+  - policy_rc_d
+  - purge
+  - state
+  - update_cache
+  - update_cache_retries
+  - update_cache_retry_max_delay
+  - upgrade
+  aliases:
+    allow-downgrade: allow_downgrade
+    allow-downgrades: allow_downgrade
+    allow_downgrades: allow_downgrade
+    allow-unauthenticated: allow_unauthenticated
+    default-release: default_release
+    install-recommends: install_recommends
+    package: name
+    pkg: name
+    update-cache: update_cache
+  freeform: false
+  supported: allow_change_held_packages, allow_downgrade, allow_unauthenticated, auto_install_module_deps, autoclean, autoremove, cache_valid_time, clean, deb, default_release, dpkg_options, fail_on_autoremove, force, force_apt_get, install_recommends, lock_timeout, only_upgrade, package, policy_rc_d, purge, state, update_cache, update_cache_retries, update_cache_retry_max_delay, upgrade (allow-downgrade, allow-downgrades, allow-unauthenticated, allow_downgrades, default-release, install-recommends, name, pkg, update-cache).
+  reports_as:
+    short: apt
+    fqcn: ansible.builtin.apt
+  choices:
+    state:
+    - absent
+    - build-dep
+    - fixed
+    - latest
+    - present
+    upgrade:
+    - dist
+    - full
+    - 'no'
+    - safe
+    - 'yes'
+  required: []
+  mutually_exclusive:
+  - - deb
+    - package
+    - upgrade
+  required_one_of:
+  - - autoremove
+    - deb
+    - package
+    - update_cache
+    - upgrade
+  types:
+    update_cache: bool
+    update_cache_retries: int
+    update_cache_retry_max_delay: int
+    cache_valid_time: int
+    purge: bool
+    install_recommends: bool
+    force: bool
+    autoremove: bool
+    autoclean: bool
+    fail_on_autoremove: bool
+    policy_rc_d: int
+    only_upgrade: bool
+    force_apt_get: bool
+    clean: bool
+    allow_unauthenticated: bool
+    allow_downgrade: bool
+    allow_change_held_packages: bool
+    lock_timeout: int
+    auto_install_module_deps: bool
+  defaults:
+    allow_change_held_packages: false
+    allow_downgrade: false
+    allow_unauthenticated: false
+    auto_install_module_deps: true
+    autoclean: false
+    autoremove: false
+    cache_valid_time: 0
+    clean: false
+    fail_on_autoremove: false
+    force: false
+    force_apt_get: false
+    lock_timeout: 60
+    only_upgrade: false
+    purge: false
+    update_cache_retries: 5
+    update_cache_retry_max_delay: 12
+    upgrade: 'no'
+ansible.builtin.package:
+  params:
+  - name
+  - state
+  - use
+  aliases:
+    pkg: name
+    expire-cache: update_cache
+  freeform: false
+  supported: allow_downgrade, allowerasing, autoremove, best, bugfix, cacheonly, conf_file, disable_excludes, disable_gpg_check, disable_plugin, disablerepo, download_dir, download_only, enable_plugin, enablerepo, exclude, install_weak_deps, installroot, list, lock_timeout, name, nobest, releasever, security, skip_broken, sslverify, state, update_cache, update_only, use_backend, validate_certs (expire-cache, pkg).
+  reports_as:
+    short: ansible.legacy.dnf
+    fqcn: ansible.legacy.dnf
+  choices:
+    state:
+    - absent
+    - installed
+    - latest
+    - present
+    - removed
+  required: []
+  mutually_exclusive:
+  - - name
+    - list
+  - - best
+    - nobest
+  required_one_of:
+  - - name
+    - list
+    - update_cache
+  types:
+    allow_downgrade: bool
+    allowerasing: bool
+    autoremove: bool
+    best: bool
+    bugfix: bool
+    cacheonly: bool
+    disable_gpg_check: bool
+    download_only: bool
+    install_weak_deps: bool
+    nobest: bool
+    security: bool
+    skip_broken: bool
+    update_cache: bool
+    update_only: bool
+    validate_certs: bool
+    sslverify: bool
+    lock_timeout: int
+  defaults:
+    allow_downgrade: false
+    allowerasing: false
+    autoremove: false
+    bugfix: false
+    cacheonly: false
+    disable_gpg_check: false
+    download_only: false
+    install_weak_deps: true
+    lock_timeout: 30
+    name: []
+    security: false
+    skip_broken: false
+    sslverify: true
+    update_cache: false
+    update_only: 'no'
+    validate_certs: true
+ansible.builtin.service:
+  params:
+  - arguments
+  - enabled
+  - name
+  - pattern
+  - runlevel
+  - sleep
+  - state
+  - use
+  aliases:
+    args: arguments
+    daemon-reexec: daemon_reexec
+    daemon-reload: daemon_reload
+    service: name
+    unit: name
+  freeform: false
+  supported: daemon_reexec, daemon_reload, enabled, force, masked, name, no_block, scope, state (daemon-reexec, daemon-reload, service, unit).
+  reports_as:
+    short: ansible.legacy.systemd
+    fqcn: ansible.legacy.systemd
+  choices:
+    state:
+    - reloaded
+    - restarted
+    - started
+    - stopped
+  required: []
+  required_one_of:
+  - - state
+    - enabled
+    - masked
+    - daemon_reload
+    - daemon_reexec
+  required_by:
+    state:
+    - name
+    enabled:
+    - name
+    masked:
+    - name
+  types:
+    enabled: bool
+    force: bool
+    masked: bool
+    daemon_reload: bool
+    daemon_reexec: bool
+    no_block: bool
+  defaults:
+    daemon_reexec: false
+    daemon_reload: false
+    no_block: false
+ansible.builtin.systemd_service:
+  params:
+  - daemon_reexec
+  - daemon_reload
+  - enabled
+  - force
+  - masked
+  - name
+  - no_block
+  - scope
+  - state
+  aliases:
+    daemon-reexec: daemon_reexec
+    daemon-reload: daemon_reload
+    service: name
+    unit: name
+  freeform: false
+  supported: daemon_reexec, daemon_reload, enabled, force, masked, name, no_block, scope, state (daemon-reexec, daemon-reload, service, unit).
+  reports_as:
+    short: systemd_service
+    fqcn: ansible.builtin.systemd_service
+  choices:
+    scope:
+    - system
+    - user
+    - global
+    state:
+    - reloaded
+    - restarted
+    - started
+    - stopped
+  required: []
+  required_one_of:
+  - - state
+    - enabled
+    - masked
+    - daemon_reload
+    - daemon_reexec
+  required_by:
+    state:
+    - name
+    enabled:
+    - name
+    masked:
+    - name
+  types:
+    enabled: bool
+    force: bool
+    masked: bool
+    daemon_reload: bool
+    daemon_reexec: bool
+    no_block: bool
+  defaults:
+    daemon_reexec: false
+    daemon_reload: false
+    no_block: false
+ansible.builtin.lineinfile:
+  params:
+  - attributes
+  - backrefs
+  - backup
+  - create
+  - encoding
+  - firstmatch
+  - group
+  - insertafter
+  - insertbefore
+  - line
+  - mode
+  - owner
+  - path
+  - regexp
+  - search_string
+  - selevel
+  - serole
+  - setype
+  - seuser
+  - state
+  - unsafe_writes
+  - validate
+  aliases:
+    attr: attributes
+    value: line
+    dest: path
+    destfile: path
+    name: path
+    regex: regexp
+  freeform: false
+  supported: attributes, backrefs, backup, create, encoding, firstmatch, group, insertafter, insertbefore, line, mode, owner, path, regexp, search_string, selevel, serole, setype, seuser, state, unsafe_writes, validate (attr, dest, destfile, name, regex, value).
+  reports_as:
+    short: lineinfile
+    fqcn: ansible.builtin.lineinfile
+  choices:
+    state:
+    - absent
+    - present
+  required:
+  - path
+  mutually_exclusive:
+  - - insertbefore
+    - insertafter
+  - - regexp
+    - search_string
+  - - backrefs
+    - search_string
+  types:
+    backrefs: bool
+    create: bool
+    backup: bool
+    firstmatch: bool
+    unsafe_writes: bool
+  defaults:
+    backrefs: false
+    backup: false
+    create: false
+    firstmatch: false
+    unsafe_writes: false
+ansible.builtin.template:
+  params:
+  - attributes
+  - backup
+  - block_end_string
+  - block_start_string
+  - comment_end_string
+  - comment_start_string
+  - dest
+  - follow
+  - force
+  - group
+  - lstrip_blocks
+  - mode
+  - newline_sequence
+  - output_encoding
+  - owner
+  - selevel
+  - serole
+  - setype
+  - seuser
+  - src
+  - trim_blocks
+  - unsafe_writes
+  - validate
+  - variable_end_string
+  - variable_start_string
+  aliases:
+    attr: attributes
+  freeform: false
+  supported: _original_basename, attributes, backup, checksum, content, dest, directory_mode, follow, force, group, local_follow, mode, owner, remote_src, selevel, serole, setype, seuser, src, unsafe_writes, validate (attr).
+  reports_as:
+    short: ansible.legacy.copy
+    fqcn: ansible.legacy.copy
+  choices: {}
+  required:
+  - dest
+  types:
+    backup: bool
+    force: bool
+    remote_src: bool
+    local_follow: bool
+    follow: bool
+    unsafe_writes: bool
+  defaults:
+    backup: false
+    follow: false
+    force: true
+    remote_src: false
+    unsafe_writes: false
+ansible.builtin.debug:
+  params:
+  - msg
+  - var
+  - verbosity
+  aliases: {}
+  freeform: false
+  supported: msg, var, verbosity.
+  reports_as:
+    short: debug
+    fqcn: ansible_collections.ansible.builtin.plugins.action.debug
+  choices: {}
+  required: []
+  mutually_exclusive:
+  - - msg
+    - var
+  types:
+    verbosity: int
+  defaults:
+    verbosity: 0
+ansible.builtin.setup:
+  params:
+  - fact_path
+  - filter
+  - gather_subset
+  - gather_timeout
+  aliases: {}
+  freeform: false
+  supported: fact_path, filter, gather_subset, gather_timeout.
+  reports_as:
+    short: setup
+    fqcn: ansible.builtin.setup
+  choices: {}
+  required: []
+  types:
+    gather_timeout: int
+  defaults:
+    gather_timeout: 10
+known:
+- add_host
+- apt
+- apt_key
+- apt_repository
+- assemble
+- assert
+- async_status
+- blockinfile
+- command
+- copy
+- cron
+- deb822_repository
+- debconf
+- debug
+- dnf
+- dnf5
+- dpkg_selections
+- expect
+- fail
+- fetch
+- file
+- find
+- gather_facts
+- get_url
+- getent
+- git
+- group
+- group_by
+- hostname
+- import_playbook
+- import_role
+- import_tasks
+- include_role
+- include_tasks
+- include_vars
+- iptables
+- known_hosts
+- lineinfile
+- meta
+- mount_facts
+- package
+- package_facts
+- pause
+- ping
+- pip
+- raw
+- reboot
+- replace
+- rpm_key
+- script
+- service
+- service_facts
+- set_fact
+- set_stats
+- setup
+- shell
+- slurp
+- stat
+- subversion
+- systemd
+- systemd_service
+- sysvinit
+- tempfile
+- template
+- unarchive
+- uri
+- user
+- validate_argument_spec
+- wait_for
+- wait_for_connection
+- yum_repository
+twins:
+  ansible.builtin.systemd: ansible.builtin.systemd_service
+redirects:
+  ansible.builtin.yum: ansible.builtin.dnf
+tombstones:
+  ansible.builtin.include:
+    kind: action
+    message: The 'ansible.builtin.include' action plugin has been removed. Use include_tasks or import_tasks instead. This feature was removed from ansible-core in a release after 2023-05-16.
+  ansible.builtin.bigip_asm_policy:
+    kind: module
+    message: The 'ansible.builtin.bigip_asm_policy' module has been removed. bigip_asm_policy has been removed please use bigip_asm_policy_manage instead. This feature was removed from ansible-core in a release after 2019-11-06.
+  ansible.builtin.bigip_facts:
+    kind: module
+    message: The 'ansible.builtin.bigip_facts' module has been removed. bigip_facts has been removed please use bigip_device_info module. This feature was removed from ansible-core in a release after 2019-11-06.
+  ansible.builtin.bigip_gtm_facts:
+    kind: module
+    message: The 'ansible.builtin.bigip_gtm_facts' module has been removed. bigip_gtm_facts has been removed please use bigip_device_info module. This feature was removed from ansible-core in a release after 2019-11-06.

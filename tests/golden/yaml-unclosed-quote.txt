@@ -1,0 +1,5 @@
+[ERROR]: YAML parsing failed: While scanning a quoted scalar found unexpected end of stream.
+Origin: /home/student/playbook.yml:6:1
+
+(source not shown: file truncated)
+

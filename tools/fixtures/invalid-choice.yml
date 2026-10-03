@@ -1,0 +1,8 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Install nginx
+      ansible.builtin.dnf:
+        name: nginx
+        use_backend: dnf4
+        state: install

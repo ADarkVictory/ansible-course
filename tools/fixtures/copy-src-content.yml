@@ -1,0 +1,8 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Copy the config
+      ansible.builtin.copy:
+        src: app.conf
+        content: "port=8080\n"
+        dest: /tmp/app.conf

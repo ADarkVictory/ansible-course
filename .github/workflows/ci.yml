@@ -1,0 +1,45 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+  ansible:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install ansible-core==2.21.4 ansible-lint==26.9.0
+      - run: sudo mkdir -p /home/student && sudo chown "$USER" /home/student
+      # Regenerate everything derived from real Ansible; any difference means the simulated course drifted.
+      - name: Regenerate from ansible-core and fail on drift
+        run: |
+          tools/capture.sh
+          python tools/gen-modules.py
+          git diff --exit-code tests/golden modules.yaml keywords.yaml
+      - name: Syntax-check and lint every solution
+        run: |
+          node tools/extract-solutions.mjs
+          shopt -s nullglob
+          for f in build/solutions/*.yml; do
+            ansible-playbook --syntax-check -i web1,web2, "$f"
+            ansible-lint "$f"
+          done
+      # ansible-inventory exits 0 even when it cannot parse a file (it only warns), so any stderr output fails the step.
+      - name: Parse every inventory solution with ansible-inventory
+        run: |
+          shopt -s nullglob
+          for f in build/inventories/*.yml; do
+            err=$(ansible-inventory -i "$f" --list 2>&1 >/dev/null) || { echo "$err"; exit 1; }
+            [ -z "$err" ] || { echo "$f: $err"; exit 1; }
+          done

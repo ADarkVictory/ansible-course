@@ -1,0 +1,55 @@
+
+PLAY [Idempotency] *************************************************************
+
+TASK [ansible.builtin.ping] ****************************************************
+ok: [web1]
+ok: [web2]
+
+TASK [Create a directory] ******************************************************
+changed: [web1]
+changed: [web2]
+
+TASK [Create a marker once] ****************************************************
+changed: [web1]
+changed: [web2]
+
+TASK [command] *****************************************************************
+changed: [web1]
+changed: [web2]
+
+TASK [Check uptime] ************************************************************
+ok: [web1]
+ok: [web2]
+
+TASK [Always changes] **********************************************************
+changed: [web1]
+changed: [web2]
+
+RUNNING HANDLER [Report] *******************************************************
+ok: [web1] => {
+    "msg": "Hello from web1"
+}
+ok: [web2] => {
+    "msg": "Hello from web2"
+}
+
+TASK [debug] *******************************************************************
+ok: [web1] => {
+    "greeting": "Hello"
+}
+ok: [web2] => {
+    "greeting": "Hello"
+}
+
+TASK [debug] *******************************************************************
+ok: [web1] => {
+    "msg": "Hello world!"
+}
+ok: [web2] => {
+    "msg": "Hello world!"
+}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=9    changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+web2                       : ok=9    changed=4    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+

@@ -1,0 +1,4 @@
+  hosts (3):
+    web1
+    web2
+    lb1

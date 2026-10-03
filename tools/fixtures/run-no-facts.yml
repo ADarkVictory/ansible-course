@@ -1,0 +1,8 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Create a directory
+      ansible.builtin.file:
+        path: "/tmp/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
