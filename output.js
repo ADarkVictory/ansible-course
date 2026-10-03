@@ -231,3 +231,15 @@ export function renderAdhoc(cmd, inventory, { stdout = '' } = {}) {
     default: return out;
   }
 }
+
+/**
+ * What `ansible-inventory --graph` prints for an inventory (cli/inventory.py _graph_group): each group's child groups, then its
+ * own hosts, indented by "  |" per level; `all` lists no hosts of its own. Goldens: tests/golden/inv-*.txt.
+ * @param groups Map name → { hosts: [names], children: [names] }, from checker.js's parseInventory
+ */
+export function renderGraph(groups) {
+  const line = (text, depth) => (depth ? `${'  |'.repeat(depth)}--${text}` : text);
+  const walk = (name, depth) => [line(`@${name}:`, depth), ...groups.get(name).children.flatMap((c) => walk(c, depth + 1)),
+    ...(name === 'all' ? [] : groups.get(name).hosts.map((h) => line(h, depth + 1)))];
+  return `${walk('all', 0).join('\n')}\n`;
+}

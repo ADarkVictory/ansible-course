@@ -1,0 +1,26 @@
+# Groups listed under all and again as children of prod; top-level groups; a host in two groups.
+all:
+  hosts:
+    bastion1:
+  children:
+    web:
+      hosts:
+        web1:
+          http_port: 8080
+        web2:
+    db:
+      hosts:
+        db1:
+    prod:
+      children:
+        web:
+        db:
+staging:
+  hosts:
+    web3:
+    db1:
+  vars:
+    tier: staging
+monitoring: ~
+lb:
+  hosts: lb1

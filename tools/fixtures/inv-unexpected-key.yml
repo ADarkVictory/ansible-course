@@ -1,0 +1,5 @@
+all:
+  web:
+    hosts:
+      web1:
+      web2:

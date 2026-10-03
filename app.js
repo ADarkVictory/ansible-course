@@ -167,8 +167,9 @@ function choice(ex, box, markDone) {
 
 // write and command exercises: an editor, Run, the terminal pane, the hint, and Show solution after three failures.
 function attempt(ex, box, markDone, rec) {
+  const writesInventory = ex.kind === 'inventory'; // the learner writes the inventory, so there is none to show and no second run
   box.append(markdown(ex.task));
-  if (ex.inventory) box.append(h('p', { className: 'label' }, 'Inventory'), h('pre', { className: 'inv' }, h('code', { textContent: ini(ex.inventory) })));
+  if (ex.inventory && !writesInventory) box.append(h('p', { className: 'label' }, 'Inventory'), h('pre', { className: 'inv' }, h('code', { textContent: ini(ex.inventory) })));
   const result = h('div', { className: 'result', 'aria-live': 'polite' });
   const help = h('div', { className: 'help' });
   let fails = 0, field;
@@ -178,7 +179,7 @@ function attempt(ex, box, markDone, rec) {
       h('p', { className: `verdict ${r.ok ? 'ok' : 'bad'}` }, r.ok ? (again ? '✓ Second run' : '✓ Correct') : '✗ Not yet'),
       !r.ok && r.hint && h('p', { className: 'hint' }, h('strong', {}, 'Hint: '), r.hint),
       r.output && terminal(r.output),
-      r.ok && ex.type === 'write' && h('div', { className: 'again' },
+      r.ok && ex.type === 'write' && !writesInventory && h('div', { className: 'again' },
         h('button', { type: 'button', className: 'secondary', onclick: () => report(checkWrite(ex, field.value, registry, keywords, { second: true }), true) }, 'Run again'),
         h('span', { className: 'muted' }, 'See what a second run changes.')),
     ].filter(Boolean));
@@ -199,7 +200,7 @@ function attempt(ex, box, markDone, rec) {
   // Attributes, not properties: autocorrect's property is a boolean in some browsers, so 'off' would turn it on.
   const plain = (e) => { for (const k of ['autocapitalize', 'autocomplete', 'autocorrect']) e.setAttribute(k, 'off'); e.setAttribute('spellcheck', 'false'); return e; };
   if (ex.type === 'write') {
-    field = plain(h('textarea', { value: saved ?? ex.starter ?? '', wrap: 'off', 'aria-label': 'Playbook editor' }));
+    field = plain(h('textarea', { value: saved ?? ex.starter ?? '', wrap: 'off', 'aria-label': writesInventory ? 'Inventory editor' : 'Playbook editor' }));
     const gutter = h('pre', { className: 'gutter', 'aria-hidden': 'true' });
     // The textarea never scrolls vertically: it is as tall as its lines, so the gutter's numbers stay level with them.
     const fit = () => {

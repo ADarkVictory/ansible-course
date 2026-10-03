@@ -1,0 +1,12 @@
+web:
+  hosts:
+    web1:
+  hosts:
+    web2:
+db:
+  hosts:
+    db1:
+    db1:
+web:
+  hosts:
+    web3:

@@ -16,8 +16,8 @@ const lessons = course.modules.flatMap((m) => m.lessons.map((l) => {
   return { base, md: `${base}.md`, ex: `${base}.ex.yaml`, exercises: existsSync(new URL(`${base}.ex.yaml`, root)) ? yaml.load(read(`${base}.ex.yaml`)) : [] };
 }));
 const all = lessons.flatMap((l) => l.exercises.map((e) => ({ ...e, lesson: l })));
-// Inventory exercises (kind: inventory) check an inventory file, not a playbook; their own validation arrives with that kind.
-const playbook = (e) => e.kind !== 'inventory';
+// Inventory exercises (kind: inventory, a write exercise) check the learner's inventory file instead of a playbook.
+const isInventory = (e) => e.kind === 'inventory';
 const nonEmpty = (s) => typeof s === 'string' && s.trim() !== '';
 
 test('course.yaml lists lessons, and every lesson has its .md and a parsing .ex.yaml', () => {
@@ -35,8 +35,12 @@ test('exercise ids are unique across the course', () => {
   assert.deepEqual(ids.filter((id, i) => ids.indexOf(id) !== i), []);
 });
 
-test('every exercise has a known type', () => {
+test('every exercise has a known type, and only write exercises have a kind (inventory, with no exercise inventory)', () => {
   for (const e of all) assert.ok(['write', 'command', 'choice'].includes(e.type), `${e.id}: unknown type ${e.type}`);
+  for (const e of all.filter((e) => 'kind' in e)) {
+    assert.ok(e.type === 'write' && e.kind === 'inventory', `${e.id}: kind ${e.kind} on a ${e.type} exercise`);
+    assert.ok(!('inventory' in e), `${e.id}: the learner writes the inventory, so the exercise has none`);
+  }
 });
 
 test('every exercise marker in a lesson names an exercise of that lesson, and each exercise is placed exactly once', () => {
@@ -57,9 +61,15 @@ test('every write and command exercise has checks, each with a non-empty hint', 
 
 test('every check uses only known keys', () => {
   const sub = ['module', 'name'];
-  for (const e of all.filter((e) => e.type !== 'choice' && playbook(e))) {
+  for (const e of all.filter((e) => e.type !== 'choice')) {
     e.checks.forEach((c, i) => {
       const at = `${e.id}: check ${i + 1}`;
+      if (isInventory(e)) {
+        assert.deepEqual(Object.keys(c).filter((k) => !['group', 'hosts', 'children', 'hint'].includes(k)), [], `${at}: unknown key`);
+        assert.ok(nonEmpty(c.group), `${at}: needs a group`);
+        for (const k of ['hosts', 'children'].filter((k) => k in c)) assert.ok(Array.isArray(c[k]) && c[k].every(nonEmpty), `${at}: ${k} must be a list of names`);
+        return;
+      }
       if (e.type === 'command') return assert.deepEqual(Object.keys(c).filter((k) => !['program', 'pattern', 'module', 'args', 'flags', 'hint'].includes(k)), [], `${at}: unknown key`);
       assert.deepEqual(Object.keys(c).filter((k) => !['play', 'task', 'handler', 'forbid', 'has', 'hint'].includes(k)), [], `${at}: unknown key`);
       const kinds = ['play', 'task', 'handler', 'forbid'].filter((k) => k in c);
@@ -89,14 +99,14 @@ test('every wrong entry has code and a valid 1-based fails', () => {
 const run = (e, code) => e.type === 'write' ? checkWrite(e, code, registry, keywords) : checkCommand(e, code, registry);
 
 test('every write and command solution passes all its checks', () => {
-  for (const e of all.filter((e) => e.type !== 'choice' && playbook(e))) {
+  for (const e of all.filter((e) => e.type !== 'choice')) {
     const r = run(e, e.solution);
     assert.ok(r.ok, `${e.id}: solution fails${r.failedCheck ? ` check ${r.failedCheck}` : ''}: ${r.hint ?? r.output}`);
   }
 });
 
 test('every wrong entry fails at exactly its check', () => {
-  for (const e of all.filter((e) => e.type !== 'choice' && playbook(e))) {
+  for (const e of all.filter((e) => e.type !== 'choice')) {
     for (const w of e.wrong ?? []) {
       const r = run(e, w.code);
       assert.ok(!r.ok && r.failedCheck === w.fails, `${e.id}: wrong entry expected to fail check ${w.fails}, got ${r.ok ? 'ok' : `check ${r.failedCheck}`}\n${w.code}`);
@@ -116,14 +126,15 @@ test('every choice has exactly one correct option and every option explains why'
 });
 
 // Ansible output and the playbook that produced it are never typed into a lesson by hand: a code block right after
-// <!-- output: <stem> --> must equal tests/golden/<stem>.txt, one after <!-- fixture: <stem> --> tools/fixtures/<stem>.yml.
+// <!-- output: <stem> --> must equal tests/golden/<stem>.txt, one after <!-- fixture: <stem> --> tools/fixtures/<stem>.yml (or .ini).
 test('lesson output and fixture blocks are copies of the real files, and no Ansible output appears without one', () => {
   const norm = (s) => s.split('\n').map((l) => l.trimEnd()).join('\n').trim();
-  const from = { output: (n) => `tests/golden/${n}.txt`, fixture: (n) => `tools/fixtures/${n}.yml` };
+  const fixture = (n) => existsSync(new URL(`tools/fixtures/${n}.yml`, root)) ? `tools/fixtures/${n}.yml` : `tools/fixtures/${n}.ini`;
+  const from = { output: (n) => `tests/golden/${n}.txt`, fixture };
   for (const l of lessons) {
     for (const [, kind, stem, body] of read(l.md).matchAll(/(?:<!--\s*(output|fixture):\s*(\S+?)\s*-->\s*)?```[^\n]*\n([\s\S]*?)```/g)) {
       if (kind) assert.equal(norm(body), norm(read(from[kind](stem))), `${l.md}: block after ${kind}: ${stem} differs from ${from[kind](stem)}`);
-      else assert.doesNotMatch(body, /^(PLAY|TASK|RUNNING HANDLER) \[|^PLAY RECAP|^\S+ \| [A-Z]+|^\[(ERROR|WARNING)\]/m, `${l.md}: Ansible output without an output marker`);
+      else assert.doesNotMatch(body, /^(PLAY|TASK|RUNNING HANDLER) \[|^PLAY RECAP|^\S+ \| [A-Z]+|^\[(ERROR|WARNING)\]|^@all:$/m, `${l.md}: Ansible output without an output marker`);
     }
   }
 });

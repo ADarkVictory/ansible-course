@@ -35,3 +35,11 @@ jobs:
             ansible-playbook --syntax-check -i web1,web2, "$f"
             ansible-lint "$f"
           done
+      # ansible-inventory exits 0 even when it cannot parse a file (it only warns), so any stderr output fails the step.
+      - name: Parse every inventory solution with ansible-inventory
+        run: |
+          shopt -s nullglob
+          for f in build/inventories/*.yml; do
+            err=$(ansible-inventory -i "$f" --list 2>&1 >/dev/null) || { echo "$err"; exit 1; }
+            [ -z "$err" ] || { echo "$f: $err"; exit 1; }
+          done

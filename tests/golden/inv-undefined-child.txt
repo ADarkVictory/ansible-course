@@ -1,0 +1,34 @@
+[WARNING]: Skipping 'db' as this is not a valid group definition
+[WARNING]: Failed to parse inventory with 'auto' plugin: no root 'plugin' key found, '/home/student/inventory.yml' is not a valid YAML inventory plugin config file
+
+Failed to parse inventory with 'auto' plugin.
+
+<<< caused by >>>
+
+no root 'plugin' key found, '/home/student/inventory.yml' is not a valid YAML inventory plugin config file
+Origin: <inventory plugin 'auto' with source '/home/student/inventory.yml'>
+
+[WARNING]: Failed to parse inventory with 'yaml' plugin: db is not a known host nor group
+
+Failed to parse inventory with 'yaml' plugin.
+
+<<< caused by >>>
+
+db is not a known host nor group
+Origin: <inventory plugin 'yaml' with source '/home/student/inventory.yml'>
+
+[WARNING]: Failed to parse inventory with 'ini' plugin: Failed to parse inventory: Invalid host pattern 'all:' supplied, ending in ':' is not allowed, this character is reserved to provide a port.
+
+Failed to parse inventory with 'ini' plugin.
+
+<<< caused by >>>
+
+Failed to parse inventory: Invalid host pattern 'all:' supplied, ending in ':' is not allowed, this character is reserved to provide a port.
+Origin: /home/student/inventory.yml
+
+[WARNING]: Unable to parse /home/student/inventory.yml as an inventory source
+[WARNING]: No inventory was parsed, only implicit localhost is available
+@all:
+  |--@ungrouped:
+  |--@web:
+  |  |--web1

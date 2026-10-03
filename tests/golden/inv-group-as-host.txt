@@ -1,0 +1,8 @@
+[WARNING]: Found both group and host with same name: web
+@all:
+  |--@ungrouped:
+  |--@web:
+  |  |--web1
+  |--@prod:
+  |  |--web
+  |  |--db1

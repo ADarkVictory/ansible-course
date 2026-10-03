@@ -1,9 +1,10 @@
 // Pure ES module, no DOM: the browser and Node run the same code.
 // parsePlaybook turns playbook text into plays, or into the exact error ansible-core 2.21.4 prints for it.
 import * as yaml from './vendor/js-yaml.mjs';
-import { render, renderAdhoc } from './output.js'; // output.js imports format/excerpt back; both only call each other at run time, so the cycle is harmless.
+import { render, renderAdhoc, renderGraph } from './output.js'; // output.js imports format/excerpt back; both only call each other at run time, so the cycle is harmless.
 
 const PATH = '/home/student/playbook.yml';
+const INV = '/home/student/inventory.yml';
 const TAB_HINT = 'Replace tabs with spaces.';
 const CURLY_HINT = 'Your keyboard inserted curly quotes; use straight quotes.';
 const DASH_HINT = 'Your keyboard turned -- into a dash; type two hyphens.';
@@ -35,6 +36,7 @@ export function parsePlaybook(source, registry, keywords) {
 // ---- Exercise checks -----------------------------------------------------------------------------------------------
 const FQCN_HINT = 'Use the fully qualified collection name, e.g. ansible.builtin.copy.';
 const CURLY = /[“”‘’]/;
+const fail = (output, hint, failedCheck) => ({ ok: false, output, ...(hint && { hint }), ...(failedCheck && { failedCheck }) });
 
 /**
  * Decides whether a learner's playbook meets a `write` exercise (spec 3.3).
@@ -43,8 +45,8 @@ const CURLY = /[“”‘’]/;
  * @returns { ok, output, hint?, failedCheck? } failedCheck is the 1-based index into exercise.checks.
  */
 export function checkWrite(exercise, source, registry, keywords, opts = {}) {
+  if (exercise.kind === 'inventory') return checkInventory(exercise, source);
   const parsed = parsePlaybook(source, registry, keywords);
-  const fail = (output, hint, failedCheck) => ({ ok: false, output, ...(hint && { hint }), ...(failedCheck && { failedCheck }) });
   if ('error' in parsed) return fail(parsed.error, parsed.hint);
   const { plays } = parsed;
   // YAML takes curly quotes as literal text, so only a value that Ansible would act on makes the answer wrong; a name or comment is fine.
@@ -221,7 +223,6 @@ export function parseCommand(line, registry) {
  */
 export function checkCommand(exercise, line, registry) {
   const cmd = parseCommand(line, registry);
-  const fail = (output, hint, failedCheck) => ({ ok: false, output, ...(hint && { hint }), ...(failedCheck && { failedCheck }) });
   if (cmd.hint) return fail('', cmd.hint);
   const shown = Object.keys(cmd.flags).some((f) => UNSIMULATED.has(f)) ? '' : renderAdhoc(cmd, exercise.inventory, { stdout: exercise.stdout });
   // A command real Ansible stops on is never correct, and a check's hint would only mislead: the learner needs that error first.
@@ -244,30 +245,246 @@ export function checkChoice(exercise, index) {
   return { ok: option?.correct === true, why: option?.why ?? '' };
 }
 
-function parse(src, registry, kw) {
+// YAML text as Ansible's loader reads it: { data, tree } or { error, hint? } (the YAML error frame naming `path`).
+function load(src, path = PATH) {
   let events, tree, docs;
   try {
     events = yaml.parseEvents(src);
     tree = nodeTree(src, events);
-    // json: true lets a later duplicate key win, as PyYAML does.
-    // ponytail: Ansible also prints a "Found duplicate mapping key" warning; not reproduced.
+    // json: true lets a later duplicate key win, as PyYAML does. tree.dups holds the duplicates (Ansible warns about each).
+    // ponytail: playbooks do not print that warning yet; inventories do.
     docs = yaml.constructFromEvents(events, { schema: SCHEMA, json: true, source: src });
   } catch (e) {
     if (!(e instanceof yaml.YAMLException)) throw e;
-    return { error: yamlError(src, e, tree), ...(src.includes('\t') && { hint: TAB_HINT }) };
+    return { error: yamlError(src, e, tree, path), ...(src.includes('\t') && { hint: TAB_HINT }) };
   }
+  if (docs.length > 1) {
+    // ponytail: libyaml points at the second "---"; a second document opened without "---" falls back to line 1.
+    const starts = [...src.matchAll(/^---(?=\s|$)/gm)].map((m) => m.index);
+    const pos = starts[events[0].explicitStart ? 1 : 0] ?? 0;
+    return { error: yamlFormat(src, 'Expected a single document in the stream but found another document.', ...lineCol(src, pos), path) };
+  }
+  return { data: docs[0] ?? null, tree };
+}
+
+// ---- Inventory exercises (kind: inventory) -------------------------------------------------------------------------
+// The learner writes /home/student/inventory.yml. What they see is what `ansible-inventory -i inventory.yml --graph` prints:
+// ansible-core tries the auto, yaml and ini inventory plugins in turn. When yaml parses the file, the other failures stay
+// silent; when none does, all three failures are printed and the run goes on with whatever the yaml plugin had added before
+// it stopped (nothing is rolled back, and groups are not attached to `all`). Ported from plugins/inventory/yaml.py,
+// inventory/data.py and inventory/group.py; goldens: tests/golden/inv-*.txt.
+// ponytail: keys are read as strings (a group or host YAML reads as a number, boolean or null is not simulated, nor are
+// integer-like names, which JS objects order first); several group/host name clashes warn in definition order, where
+// real Ansible's order varies from run to run; ansible_group_priority values and duplicate localhost entries are not checked.
+const INVALID_GROUP_CHARS = /^\p{Nd}|[^\p{L}\p{N}_]/u; // C.INVALID_VARIABLE_NAMES, Unicode-aware as in Python
+const NOT_SIMULATED_INI = 'Ansible would read this file as an INI inventory, which this course doesn\'t simulate here. Write the inventory in YAML.';
+class Unsupported { constructor(hint) { this.hint = hint; } }
+class ParseFailure { constructor(msg) { this.msg = msg; } }
+// utils/vars.py validate_variable_name; an invalid name makes Ansible print a deprecation warning the course does not reproduce.
+const checkVar = (name) => {
+  if (!/^[A-Za-z_]\w*$/.test(name) || ['False', 'None', 'True', 'false', 'none', 'not', 'true'].includes(name)) {
+    throw new Unsupported(`This course doesn't simulate Ansible's warning about the variable name '${name}'. Variable names use only letters, digits and underscores, and start with a letter or underscore.`);
+  }
+};
+
+/**
+ * @returns { output, groups, hint?, yamlError?, unsupported? }
+ *   output: what ansible-inventory --graph prints ('' when the course cannot reproduce it; hint then says why);
+ *   groups: Map name → { hosts: [names], children: [names], parents: [names] }, the inventory Ansible ends up with;
+ *   yamlError: the file is not valid YAML; hint: tabs, curly quotes, or what is not simulated.
+ */
+export function parseInventory(source) {
+  const src = String(source).replace(/\r\n?/g, '\n');
+  const loaded = load(src, INV);
+  const groups = new Map(), hosts = new Map(); // host → Set of the groups it is directly in
+  let out = '';
+  const warned = new Set(); // Display.warning prints a given message once
+  const warn = (msg) => { if (!warned.has(msg)) { warned.add(msg); out += `[WARNING]: ${msg}\n`; } };
+  const ancestors = (g, seen = new Set()) => {
+    for (const p of groups.get(g).parents) if (!seen.has(p)) { seen.add(p); ancestors(p, seen); }
+    return seen;
+  };
+  const addGroup = (name) => {
+    if (groups.has(name)) return;
+    if (INVALID_GROUP_CHARS.test(name)) warn('Invalid characters were found in group names but not replaced, use -vvvv to see details');
+    groups.set(name, { hosts: [], children: [], parents: [] });
+  };
+  const addChild = (parent, child) => { // InventoryData.add_child
+    const g = groups.get(parent);
+    if (groups.has(child)) {
+      if (parent === child) throw new ParseFailure("can't add group to itself");
+      if (g.children.includes(child)) return;
+      if (ancestors(parent).has(child)) throw new ParseFailure(`Adding group '${child}' as child to '${parent}' creates a recursive dependency loop.`);
+      g.children.push(child);
+      if (!groups.get(child).parents.includes(parent)) groups.get(child).parents.push(parent);
+    } else if (hosts.has(child)) {
+      if (!g.hosts.includes(child)) { g.hosts.push(child); hosts.get(child).add(parent); }
+    } else throw new ParseFailure(`${child} is not a known host nor group`);
+  };
+  // yaml.py InventoryModule._parse_group
+  const parseGroup = (name, data) => {
+    if (!(isMap(data) || data === null)) {
+      warn(`Skipping '${name}' as this is not a valid group definition`);
+      return name;
+    }
+    addGroup(name);
+    if (data === null) return name;
+    for (const section of ['vars', 'children', 'hosts'].filter((k) => k in data)) {
+      if (typeof data[section] === 'string') data[section] = { [data[section]]: null };
+      if (!(isMap(data[section]) || data[section] === null)) {
+        throw new ParseFailure(`Invalid "${section}" entry for "${name}" group, requires a dictionary, found "${pyType(data[section])}" instead.`);
+      }
+    }
+    for (const [key, value] of Object.entries(data)) {
+      if (value instanceof Date) throw new Unsupported('This course doesn\'t simulate dates in an inventory yet.');
+      if (!(isMap(value) || value === null)) {
+        warn(`Skipping key (${key}) in group (${name}) as it is not a mapping, it is a ${pyType(value)}`);
+        continue;
+      }
+      if (value === null) continue;
+      if (key === 'vars') Object.keys(value).forEach(checkVar);
+      else if (key === 'children') for (const [sub, d] of Object.entries(value)) addChild(name, parseGroup(sub, d));
+      else if (key === 'hosts') {
+        for (const [host, d] of Object.entries(value)) {
+          if (host === '') throw new Unsupported('This course doesn\'t simulate an empty host name; give every host a name.');
+          if (/[[\]:]/.test(host)) throw new Unsupported('This course doesn\'t simulate host ranges or ports in inventory host names yet.');
+          const vars = pyFalsy(d) ? {} : d;
+          if (!isMap(vars)) throw new ParseFailure(`Invalid data from file, expected dictionary and got:\n\n${pyStr(vars)}`);
+          if (!hosts.has(host)) hosts.set(host, new Set());
+          const g = groups.get(name); // InventoryData.add_host: a host, even where a group has the same name
+          if (!g.hosts.includes(host)) { g.hosts.push(host); hosts.get(host).add(name); }
+          Object.keys(vars).forEach(checkVar);
+        }
+      } else warn(`Skipping unexpected key (${key}) in group (${name}), only "vars", "children" and "hosts" are valid`);
+    }
+    return name;
+  };
+  // yaml.py InventoryModule.parse: undefined when it parsed the file, else why it failed.
+  const yamlPlugin = (data) => {
+    if (pyFalsy(data)) return 'Parsed empty YAML file';
+    if (!isMap(data)) return `YAML inventory has invalid structure, it should be a dictionary, got: ${pyType(data)}`;
+    try {
+      for (const [name, d] of Object.entries(data)) parseGroup(name, d);
+    } catch (e) {
+      if (e instanceof ParseFailure) return e.msg;
+      throw e;
+    }
+  };
+  const reconcile = () => { // InventoryData.reconcile_inventory
+    for (const name of groups.keys()) if (name !== 'all' && !ancestors(name).size) addChild('all', name);
+    for (const [host, direct] of hosts) {
+      const ungrouped = groups.get('ungrouped');
+      if (direct.has('ungrouped')) {
+        if ([...direct].some((g) => g !== 'all' && g !== 'ungrouped')) { ungrouped.hosts.splice(ungrouped.hosts.indexOf(host), 1); direct.delete('ungrouped'); }
+      } else if ([...direct].every((g) => g === 'all')) addChild('ungrouped', host);
+    }
+    for (const name of groups.keys()) if (hosts.has(name)) warn(`Found both group and host with same name: ${name}`);
+  };
+  const failed = (plugin, msg, detail) =>
+    `[WARNING]: Failed to parse inventory with '${plugin}' plugin: ${msg}\n\nFailed to parse inventory with '${plugin}' plugin.\n\n<<< caused by >>>\n\n${detail}\n\n`;
+  const pluginOrigin = (plugin) => `Origin: <inventory plugin '${plugin}' with source '${INV}'>`;
+
+  try {
+    addGroup('all');
+    addGroup('ungrouped');
+    addChild('all', 'ungrouped');
+    let auto, yamlMsg;
+    if ('error' in loaded) {
+      const frame = loaded.error.slice('[ERROR]: '.length).trimEnd();
+      yamlMsg = frame.split('\n')[0];
+      auto = [yamlMsg, frame]; // the auto plugin loads the file first, so its failure carries the YAML error frame
+    } else {
+      for (const d of loaded.tree.dups) {
+        out += `[WARNING]: Found duplicate mapping key ${pyRepr(d.str)}.\n${excerpt(src, ...lineCol(src, d.pos), INV)}\n\nUsing last defined value only.\n\n`;
+      }
+      if (isMap(loaded.data) && !pyFalsy(loaded.data.plugin ?? null)) throw new Unsupported('This course doesn\'t simulate inventory plugins yet.');
+      const msg = `no root 'plugin' key found, '${INV}' is not a valid YAML inventory plugin config file`;
+      auto = [msg, `${msg}\n${pluginOrigin('auto')}`];
+      yamlMsg = yamlPlugin(loaded.data);
+    }
+    const ini = yamlMsg === undefined ? undefined : iniFailure(src);
+    if (ini === undefined) reconcile(); // parsed by yaml, or by ini as an empty inventory (a file of comments and blank lines)
+    else {
+      for (const host of ini.hosts) { // what the ini plugin added before it failed stays, in ungrouped
+        if (!hosts.has(host)) hosts.set(host, new Set());
+        if (!groups.get('ungrouped').hosts.includes(host)) { groups.get('ungrouped').hosts.push(host); hosts.get(host).add('ungrouped'); }
+      }
+      const iniMsg = `Failed to parse inventory: ${ini.msg}`;
+      out += failed('auto', ...auto) + failed('yaml', yamlMsg, `${yamlMsg}\n${pluginOrigin('yaml')}`) + failed('ini', iniMsg, `${iniMsg}\nOrigin: ${INV}`)
+        + `[WARNING]: Unable to parse ${INV} as an inventory source\n[WARNING]: No inventory was parsed, only implicit localhost is available\n`;
+    }
+    const curly = CURLY.test(src) && ('error' in loaded || hasCurly(loaded.data));
+    const hint = loaded.hint ?? (curly ? CURLY_HINT : undefined);
+    return { output: out + renderGraph(groups), groups, ...(hint && { hint }), ...('error' in loaded && { yamlError: true }) };
+  } catch (e) {
+    if (e instanceof Unsupported) return { output: '', groups, hint: e.hint, unsupported: true };
+    throw e;
+  }
+}
+
+// How the ini plugin fails on this text (plugins/inventory/ini.py): { msg, hosts } with the hosts it had added to ungrouped by
+// then, or undefined for a file of blank and comment lines (ini parses that as an empty inventory). Throws Unsupported when
+// ini would parse the file (an INI inventory, which the course does not simulate) or reach what is not simulated here.
+function iniFailure(src) {
+  const hosts = [];
+  for (const raw of src.split('\n')) {
+    const line = raw.trim();
+    if (!line || line[0] === '#' || line[0] === ';') continue;
+    if (/^\[[^:\]\s]+(?::\w+)?\]\s*(?:#.*)?$/.test(line)) throw new Unsupported(NOT_SIMULATED_INI); // a [section]
+    if (line.startsWith('[') && line.endsWith(']')) {
+      return { hosts, msg: `Invalid section entry: '${line}'. Please make sure that there are no spaces in the section entry, and that there are no other invalid characters` };
+    }
+    if (/["'\\]/.test(line)) throw new Unsupported(NOT_SIMULATED_INI); // ponytail: shlex quoting is not simulated
+    const [host, ...rest] = line.replace(/#.*/, '').split(/\s+/).filter(Boolean); // shlex.split(comments=True), unquoted
+    if (host.includes('[')) throw new Unsupported(NOT_SIMULATED_INI); // host ranges
+    if (host.endsWith(':')) return { hosts, msg: `Invalid host pattern '${host}' supplied, ending in ':' is not allowed, this character is reserved to provide a port.` };
+    if (host === '---') return { hosts, msg: "Invalid host pattern '---' supplied, '---' is normally a sign this is a YAML file." };
+    const bad = rest.find((t) => !t.includes('='));
+    if (bad !== undefined) return { hosts, msg: `Expected key=value host variable assignment, got: ${bad}` };
+    if (host.includes(':')) throw new Unsupported(NOT_SIMULATED_INI); // a port
+    rest.forEach((t) => checkVar(t.slice(0, t.indexOf('='))));
+    hosts.push(host);
+  }
+  if (hosts.length) throw new Unsupported(NOT_SIMULATED_INI);
+  return undefined;
+}
+
+/**
+ * Decides whether a learner's inventory meets a `kind: inventory` write exercise.
+ * @param exercise { checks: [{ group, hosts?, children?, hint }] } a check passes when `group` is reachable from `all` and
+ *                 directly holds exactly `hosts` and exactly the child groups `children` (each compared as a set, when given)
+ * @returns { ok, output, hint?, failedCheck? } like checkWrite. The checks run on the inventory Ansible ended up with, even after
+ *          it failed to parse the file; an inventory Ansible warned about is never correct, but a failing check speaks first.
+ */
+function checkInventory(exercise, source) {
+  const inv = parseInventory(source);
+  if (inv.hint) return fail(inv.output, inv.hint);
+  if (inv.yamlError) return fail(inv.output);
+  const reachable = new Set();
+  const walk = (g) => { if (!reachable.has(g)) { reachable.add(g); inv.groups.get(g).children.forEach(walk); } };
+  walk('all');
+  const same = (have, want) => have.length === want.length && want.every((x) => have.includes(String(x)));
+  const checks = exercise.checks ?? [];
+  const i = checks.findIndex((c) => {
+    const bad = Object.keys(c).find((k) => !['group', 'hosts', 'children', 'hint'].includes(k));
+    if (bad) throw new Error(`unknown check key ${bad} in exercise ${exercise.id}: ${JSON.stringify(c)}`);
+    const g = reachable.has(c.group) && inv.groups.get(c.group);
+    return !g || (c.hosts && !same(g.hosts, c.hosts)) || (c.children && !same(g.children, c.children));
+  });
+  if (i >= 0) return fail(inv.output, checks[i].hint, i + 1);
+  if (/^\[WARNING\]/m.test(inv.output)) return fail(inv.output);
+  return { ok: true, output: inv.output };
+}
+
+function parse(src, registry, kw) {
+  const loaded = load(src);
+  if ('error' in loaded) return loaded;
+  const { data, tree } = loaded;
   const err = (msg, ctx, help) => ({ error: format(msg, ctx, help) });
   const at = (node) => excerpt(src, ...lineCol(src, node.pos));
   const ctx = (value, node) => value === null ? undefined
     : typeof value === 'boolean' || !node || node.pos < 0 ? `Origin: <unknown>\n\n${shorten(pyStr(value))}` : at(node);
 
-  if (docs.length > 1) {
-    // ponytail: libyaml points at the second "---"; a second document opened without "---" falls back to line 1.
-    const starts = [...src.matchAll(/^---(?=\s|$)/gm)].map((m) => m.index);
-    const pos = starts[events[0].explicitStart ? 1 : 0] ?? 0;
-    return { error: yamlFormat(src, 'Expected a single document in the stream but found another document.', ...lineCol(src, pos)) };
-  }
-  const data = docs[0] ?? null;
   const root = tree.items[0]?.items[0];
   if (data === null) return err(`Empty playbook, nothing to do: ${PATH}`);
   if (!Array.isArray(data)) {
@@ -512,7 +729,7 @@ function splitArgs(args) {
 // ---- YAML errors -------------------------------------------------------------------------------------------------
 // js-yaml's reasons and marks differ from libyaml's, so each kind is mapped to the libyaml wording ansible-core shows.
 // Then Ansible's own target-line heuristics (tabs, templates, colons, quotes) run, as in ansible/_internal/_yaml/_errors.py.
-function yamlError(src, e, tree) {
+function yamlError(src, e, tree, path) {
   const r = e.reason;
   let pos = e.mark?.position ?? 0;
   let msg;
@@ -549,10 +766,10 @@ function yamlError(src, e, tree) {
     // ponytail: remaining js-yaml reasons (tags, anchors, directives, escapes) keep their own wording in libyaml's frame.
     msg = `${r[0].toUpperCase()}${r.slice(1)}.`;
   }
-  return yamlFormat(src, msg, ...lineCol(src, pos));
+  return yamlFormat(src, msg, ...lineCol(src, pos), path);
 }
 
-function yamlFormat(src, msg, line, col) {
+function yamlFormat(src, msg, line, col, path) {
   const target = (src.split('\n')[line - 1] ?? '');
   const valueAt = (m) => m.index + m[0].length - m.groups.value.length; // `value` is always the last group
   let help, m, c;
@@ -576,7 +793,7 @@ function yamlFormat(src, msg, line, col) {
       help = '\nFor example:\n\n    raw: "foo" in "bar"\n\nShould be:\n\n    raw: \'"foo" in "bar"\'\n';
     }
   }
-  return format(`YAML parsing failed: ${msg}`, excerpt(src, line, col), help);
+  return format(`YAML parsing failed: ${msg}`, excerpt(src, line, col, path), help);
 }
 
 // Innermost open block collection at or left of column c, read off the lines above line li (0-based): 'seq', 'map', or
@@ -646,8 +863,8 @@ export function format(msg, ctx, help) {
   return `[ERROR]: ${s}${s.includes('\n') ? '\n\n' : '\n'}`;
 }
 
-export function excerpt(src, line, col) {
-  const origin = `Origin: ${PATH}:${line}:${col}`;
+export function excerpt(src, line, col, path = PATH) {
+  const origin = `Origin: ${path}:${line}:${col}`;
   const lines = (src.match(/[^\n]*\n|[^\n]+$/g) ?? []).map((l) => l.replace(/\n$/, ''));
   const start = Math.max(0, line - 3);
   if (lines.length < line) return `${origin}\n\n(source not shown: file truncated)`;
@@ -671,14 +888,17 @@ function lineCol(src, pos) {
 }
 
 // js-yaml's events as nodes with source offsets: { pos, items } for sequences, { pos, keys: Map(key → { key, value }) }
-// for mappings, { pos } otherwise. Also records the first non-scalar mapping key (libyaml: "found unhashable key").
+// for mappings, { pos } otherwise. Also records the first non-scalar mapping key (libyaml: "found unhashable key"), and in
+// root.dups every repeated key ({ pos, str }) in the order Ansible's constructor warns: level by level (PyYAML builds nested
+// collections breadth first), in document order within a level.
 function nodeTree(src, events) {
-  const E = yaml.EVENT_ID, root = { items: [] }, stack = [root];
+  const E = yaml.EVENT_ID, root = { items: [] }, stack = [root], dups = [];
   const add = (n) => {
     const top = stack.at(-1);
     if (!top.keys) return top.items.push(n);
     if (!top.pending) return (top.pending = n);
     if (top.pending.str === undefined) root.complexKey ??= top.pending.pos;
+    else if (top.keys.has(top.pending.str)) dups.push({ ...top.pending, depth: stack.length });
     top.keys.set(top.pending.str, { key: top.pending, value: n });
     top.pending = undefined;
   };
@@ -689,6 +909,7 @@ function nodeTree(src, events) {
     else if (e.type === E.POP) add(stack.pop());
     else add(e.type === E.SCALAR ? { pos, str: yaml.getScalarValue(src, e) } : { pos });
   }
+  root.dups = dups.sort((a, b) => a.depth - b.depth);
   return root;
 }
 

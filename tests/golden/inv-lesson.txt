@@ -1,0 +1,9 @@
+@all:
+  |--@ungrouped:
+  |  |--bastion1
+  |--@prod:
+  |  |--@web:
+  |  |  |--web1
+  |  |  |--web2
+  |  |--@db:
+  |  |  |--db1

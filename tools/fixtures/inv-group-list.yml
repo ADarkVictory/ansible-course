@@ -1,0 +1,6 @@
+web:
+  - web1
+  - web2
+db:
+  hosts:
+    db1:

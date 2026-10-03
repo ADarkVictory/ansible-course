@@ -1,0 +1,45 @@
+[WARNING]: Failed to parse inventory with 'auto' plugin: YAML parsing failed: Colons in unquoted values must be followed by a non-space character.
+
+Failed to parse inventory with 'auto' plugin.
+
+<<< caused by >>>
+
+YAML parsing failed: Colons in unquoted values must be followed by a non-space character.
+Origin: /home/student/inventory.yml:5:8
+
+3   hosts:
+4     web1:
+5    web2:
+         ^ column 8
+
+
+For example:
+
+    raw: echo 'name: ansible'
+
+Should be:
+
+    raw: "echo 'name: ansible'"
+
+[WARNING]: Failed to parse inventory with 'yaml' plugin: YAML parsing failed: Colons in unquoted values must be followed by a non-space character.
+
+Failed to parse inventory with 'yaml' plugin.
+
+<<< caused by >>>
+
+YAML parsing failed: Colons in unquoted values must be followed by a non-space character.
+Origin: <inventory plugin 'yaml' with source '/home/student/inventory.yml'>
+
+[WARNING]: Failed to parse inventory with 'ini' plugin: Failed to parse inventory: Invalid host pattern '---' supplied, '---' is normally a sign this is a YAML file.
+
+Failed to parse inventory with 'ini' plugin.
+
+<<< caused by >>>
+
+Failed to parse inventory: Invalid host pattern '---' supplied, '---' is normally a sign this is a YAML file.
+Origin: /home/student/inventory.yml
+
+[WARNING]: Unable to parse /home/student/inventory.yml as an inventory source
+[WARNING]: No inventory was parsed, only implicit localhost is available
+@all:
+  |--@ungrouped:

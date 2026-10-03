@@ -1,0 +1,36 @@
+[WARNING]: Found duplicate mapping key 'web'.
+Origin: /home/student/inventory.yml:10:1
+
+ 8     db1:
+ 9     db1:
+10 web:
+   ^ column 1
+
+Using last defined value only.
+
+[WARNING]: Found duplicate mapping key 'hosts'.
+Origin: /home/student/inventory.yml:4:3
+
+2   hosts:
+3     web1:
+4   hosts:
+    ^ column 3
+
+Using last defined value only.
+
+[WARNING]: Found duplicate mapping key 'db1'.
+Origin: /home/student/inventory.yml:9:5
+
+7   hosts:
+8     db1:
+9     db1:
+      ^ column 5
+
+Using last defined value only.
+
+@all:
+  |--@ungrouped:
+  |--@web:
+  |  |--web3
+  |--@db:
+  |  |--db1

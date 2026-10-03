@@ -6,6 +6,8 @@
 #   ansible-playbook -i tools/fixtures/inventory-multi.ini playbook.yml           (run-hosts-patterns)
 #   ansible <args> -i tools/fixtures/inventory-multi.ini                          (adhoc-*, see the adhoc calls below)
 #   list-hosts.json: ansible <pattern> --list-hosts over inventory-multi.ini      (tools/gen-hosts.py)
+#   ansible-inventory -i inventory.yml --graph                                    (inv-*: the fixture as /home/student/inventory.yml)
+#   ansible-inventory -i inventory.ini --graph                                    (inventory-lesson: the INI fixture)
 # ANSIBLE_FORKS=1 keeps host order deterministic (web1 before web2); default forks=5 races.
 # <name>-second is <name>.yml run a second time with no cleanup in between.
 # Needs: ansible-core 2.21.4 (the .venv, an active environment, or uv + python3.13 to make the .venv) and a writable /home/student (CI: sudo mkdir -p /home/student && sudo chown $USER /home/student).
@@ -68,6 +70,16 @@ adhoc adhoc-unsupported-param-redirect web -m systemd -a 'name=x bogus=1'
 adhoc adhoc-limit 'web:db' -m ping --limit prod
 adhoc adhoc-limit-empty web -m ping --limit db
 adhoc adhoc-limit-unmatched nosuch -m ping --limit nosuch
+# Inventory exercises: what the learner's inventory.yml makes ansible-inventory print (stdout and stderr together).
+for src in "$root"/tools/fixtures/inv-*.yml; do
+  f=$(basename "$src" .yml)
+  cp "$src" /home/student/inventory.yml
+  ansible-inventory -i inventory.yml --graph > "$out/$f.txt" 2>&1 < /dev/null
+done
+rm -f /home/student/inventory.yml
+cp "$root/tools/fixtures/inventory-lesson.ini" /home/student/inventory.ini
+ansible-inventory -i inventory.ini --graph > "$out/inventory-lesson.txt" 2>&1 < /dev/null
+rm -f /home/student/inventory.ini
 "$bin/python" "$root/tools/gen-hosts.py" "$invm" > "$out/list-hosts.json"
 "$bin/python" "$root/tools/gen-kv.py" > "$out/kv.json"
 exit 0

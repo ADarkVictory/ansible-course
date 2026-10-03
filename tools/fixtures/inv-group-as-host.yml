@@ -1,0 +1,7 @@
+web:
+  hosts:
+    web1:
+prod:
+  hosts:
+    web:
+    db1:
