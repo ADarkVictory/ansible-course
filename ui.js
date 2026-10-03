@@ -49,3 +49,6 @@ export function loadProgress(storage) {
 export function saveProgress(storage, data) {
   try { storage.setItem(KEY, JSON.stringify(data)); } catch { /* the site works without saved progress */ }
 }
+
+/** A banner line as ansible-core's Display.banner prints it: text, a space, then a run of `*` to the end of the line. */
+export const isBanner = (line) => /\S \*+$/.test(line);

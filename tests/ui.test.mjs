@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRoute, applyKey, loadProgress, saveProgress } from '../ui.js';
+import { parseRoute, applyKey, loadProgress, saveProgress, isBanner } from '../ui.js';
 
 test('parseRoute reads #/<module-dir>/<lesson-file>', () => {
   assert.deepEqual(parseRoute('#/01-foundations/02-inventories'), { module: '01-foundations', lesson: '02-inventories' });
@@ -61,4 +61,21 @@ test('saveProgress is a no-op when storage throws, and round-trips through a wor
   const data = { ex: { 'what-is-ansible-1': { done: true, solutionShown: true } } };
   saveProgress(storage, data);
   assert.deepEqual(loadProgress(storage), data);
+});
+
+test('isBanner: text, a space, then a run of * to the end of the line (ansible-core Display.banner)', () => {
+  const stars = (n) => '*'.repeat(n);
+  for (const line of [
+    `PLAY [web] ${stars(69)}`,
+    `TASK [Gathering Facts] ${stars(57)}`,
+    `RUNNING HANDLER [Restart nginx] ${stars(48)}`,
+    `PLAY RECAP ${stars(69)}`,
+    // a long task name gets Ansible's minimum of three stars and runs past 80 columns
+    `TASK [Install nginx, then configure it, then make sure it is enabled and running on every web host] ${stars(3)}`,
+  ]) assert.equal(isBanner(line), true, line);
+});
+
+test('isBanner: every other line is not a banner', () => {
+  for (const line of ['', 'ok: [web1]', 'changed: [web2]', '***', ' ***', 'TASK [x] *** trailing', 'a * b', 'fatal: [web1]: FAILED! => {"msg": "x ***"}x',
+    '        ^ column 7', 'PLAY [web]', 'web1                       : ok=2    changed=1']) assert.equal(isBanner(line), false, JSON.stringify(line));
 });

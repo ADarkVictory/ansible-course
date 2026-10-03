@@ -271,6 +271,8 @@ pre.inv { margin-top: 0; padding: 8px 12px; font-size: 13px; }
   font-size: 13px; line-height: 1.5;
   white-space: pre-wrap; overflow-wrap: anywhere; /* wraps like a real terminal: the end of an error line is the part that matters */
 }
+/* Banners never wrap: their surplus stars (Ansible pads them to at least 80 columns) run off the edge and are clipped. */
+.term .banner { display: inline-block; max-width: 100%; overflow: hidden; vertical-align: top; white-space: pre; }
 .again { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 0.9rem; }
 .help { margin-top: 12px; }
 .help pre { margin-top: 0; }

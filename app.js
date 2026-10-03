@@ -4,7 +4,7 @@
 import * as yaml from './vendor/js-yaml.mjs';
 import { marked } from './vendor/marked.esm.js';
 import { checkWrite, checkCommand, checkChoice } from './checker.js';
-import { parseRoute, applyKey, loadProgress, saveProgress } from './ui.js';
+import { parseRoute, applyKey, loadProgress, saveProgress, isBanner } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
 const storage = (() => { try { return window.localStorage; } catch { return undefined; } })();
@@ -175,7 +175,7 @@ function attempt(ex, box, markDone, rec) {
     result.replaceChildren(...[
       h('p', { className: `verdict ${r.ok ? 'ok' : 'bad'}` }, r.ok ? (again ? '✓ Second run' : '✓ Correct') : '✗ Not yet'),
       !r.ok && r.hint && h('p', { className: 'hint' }, h('strong', {}, 'Hint: '), r.hint),
-      r.output && h('pre', { className: 'term', textContent: r.output }),
+      r.output && terminal(r.output),
       r.ok && ex.type === 'write' && h('div', { className: 'again' },
         h('button', { type: 'button', className: 'secondary', onclick: () => report(checkWrite(ex, field.value, registry, keywords, { second: true }), true) }, 'Run again'),
         h('span', { className: 'muted' }, 'See what a second run changes.')),
@@ -234,6 +234,11 @@ function attempt(ex, box, markDone, rec) {
   }
   box.append(result, help);
 }
+
+// The terminal pane wraps long lines as a narrow terminal does, except banners (PLAY [...] ****): Ansible pads those to at least
+// 80 columns, so their surplus stars are clipped at the edge instead of wrapping. The text stays byte-exact, so copying it is unchanged.
+const terminal = (text) => h('pre', { className: 'term' },
+  ...text.split('\n').flatMap((line, i) => [i ? '\n' : null, isBanner(line) ? h('span', { className: 'banner' }, line) : line]));
 
 // The engine's inventories are { group: [hosts] }; shown as the INI file the lessons teach.
 const ini = (inv) => Object.entries(inv).map(([g, hosts]) =>
