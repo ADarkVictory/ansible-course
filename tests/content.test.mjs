@@ -7,13 +7,14 @@ import { checkCommand, checkWrite } from '../checker.js';
 
 const root = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
-const registry = yaml.load(read('modules.yaml'));
-const keywords = yaml.load(read('keywords.yaml'));
-const course = yaml.load(read('course.yaml'));
+const load = (p) => yaml.load(read(p), { filename: p }); // a YAML error names the file
+const registry = load('modules.yaml');
+const keywords = load('keywords.yaml');
+const course = load('course.yaml');
 
 const lessons = course.modules.flatMap((m) => m.lessons.map((l) => {
   const base = `lessons/${m.dir}/${l.file}`;
-  return { base, md: `${base}.md`, ex: `${base}.ex.yaml`, exercises: existsSync(new URL(`${base}.ex.yaml`, root)) ? yaml.load(read(`${base}.ex.yaml`)) : [] };
+  return { base, md: `${base}.md`, ex: `${base}.ex.yaml`, exercises: existsSync(new URL(`${base}.ex.yaml`, root)) ? load(`${base}.ex.yaml`) : [] };
 }));
 const all = lessons.flatMap((l) => l.exercises.map((e) => ({ ...e, lesson: l })));
 // Inventory exercises (kind: inventory, a write exercise) check the learner's inventory file instead of a playbook.
@@ -25,7 +26,7 @@ test('course.yaml lists lessons, and every lesson has its .md and a parsing .ex.
   for (const l of lessons) {
     assert.ok(existsSync(new URL(l.md, root)), `${l.md} is missing`);
     assert.ok(existsSync(new URL(l.ex, root)), `${l.ex} is missing`);
-    assert.ok(Array.isArray(l.exercises) && l.exercises.length > 0, `${l.ex} must be a non-empty list`);
+    assert.ok(Array.isArray(l.exercises) && l.exercises.length >= 3, `${l.ex} must list at least three exercises`);
   }
 });
 
@@ -52,9 +53,10 @@ test('every exercise marker in a lesson names an exercise of that lesson, and ea
   }
 });
 
-test('every write and command exercise has checks, each with a non-empty hint', () => {
+test('every write and command exercise has checks, each with a non-empty hint, and at least one wrong answer', () => {
   for (const e of all.filter((e) => e.type !== 'choice')) {
     assert.ok(Array.isArray(e.checks) && e.checks.length > 0, `${e.id}: needs checks`);
+    assert.ok(e.wrong?.length >= 1, `${e.id}: needs at least one wrong entry`);
     e.checks.forEach((c, i) => assert.ok(nonEmpty(c.hint), `${e.id}: check ${i + 1} needs a hint`));
   }
 });
@@ -89,18 +91,23 @@ test('command exercises have an inventory, except ansible-doc ones (it reads no 
   }
 });
 
-test('every output_golden names a file in tests/golden', () => {
-  for (const e of all.filter((e) => 'output_golden' in e)) assert.ok(existsSync(new URL(`tests/golden/${e.output_golden}.txt`, root)), `${e.id}: no tests/golden/${e.output_golden}.txt`);
+// A passing ansible line shows output_golden instead of what it ran, so only ansible-doc exercises (one command, one output) use it.
+test('every output_golden names a file in tests/golden, on an ansible-doc exercise', () => {
+  for (const e of all.filter((e) => 'output_golden' in e)) {
+    assert.ok(existsSync(new URL(`tests/golden/${e.output_golden}.txt`, root)), `${e.id}: no tests/golden/${e.output_golden}.txt`);
+    assert.ok(e.solution.startsWith('ansible-doc '), `${e.id}: output_golden is for ansible-doc exercises`);
+  }
 });
 
 // fails: fqcn names the FQCN rule of an exercise with fqcn: true, which runs before the checks; fails: error, a playbook real
-// Ansible stops on (its [ERROR] is the learner's feedback, with no check hint).
+// Ansible stops on (its [ERROR] is the learner's feedback, with no check hint); fails: hint, what the course does not simulate
+// (its hint, with no output).
 test('every wrong entry has code and a valid 1-based fails', () => {
   for (const e of all.filter((e) => e.wrong)) {
     for (const w of e.wrong) {
       assert.ok(typeof w.code === 'string', `${e.id}: wrong entry needs code`);
       if (w.fails === 'fqcn') { assert.equal(e.fqcn, true, `${e.id}: fails: fqcn needs fqcn: true`); continue; }
-      if (w.fails === 'error') continue;
+      if (w.fails === 'error' || w.fails === 'hint') continue;
       assert.ok(Number.isInteger(w.fails) && w.fails >= 1 && w.fails <= (e.checks?.length ?? 0), `${e.id}: fails ${w.fails} is not an index into checks`);
     }
   }
@@ -133,6 +140,10 @@ test('every wrong entry fails at exactly its check', () => {
         assert.ok(!r.ok && r.failedCheck === undefined && /^\[ERROR\]: /m.test(r.output), `${e.id}: wrong entry expected real Ansible's [ERROR]\n${w.code}`);
         continue;
       }
+      if (w.fails === 'hint') {
+        assert.ok(!r.ok && r.failedCheck === undefined && r.output === '' && /doesn't simulate/.test(r.hint), `${e.id}: wrong entry expected the course hint\n${w.code}`);
+        continue;
+      }
       assert.ok(!r.ok && r.failedCheck === w.fails, `${e.id}: wrong entry expected to fail check ${w.fails}, got ${r.ok ? 'ok' : `check ${r.failedCheck}`}\n${w.code}`);
     }
   }
@@ -150,14 +161,21 @@ test('every choice has exactly one correct option and every option explains why'
 
 // Ansible output and the playbook that produced it are never typed into a lesson by hand: a code block right after
 // <!-- output: <stem> --> must equal tests/golden/<stem>.txt, one after <!-- fixture: <stem> --> tools/fixtures/<stem>.yml (or .ini).
+// Exercise text (task, question, code, each option's text and why) has no marker, so it must hold no Ansible output at all.
 test('lesson output and fixture blocks are copies of the real files, and no Ansible output appears without one', () => {
   const norm = (s) => s.split('\n').map((l) => l.trimEnd()).join('\n').trim();
   const fixture = (n) => existsSync(new URL(`tools/fixtures/${n}.yml`, root)) ? `tools/fixtures/${n}.yml` : `tools/fixtures/${n}.ini`;
   const from = { output: (n) => `tests/golden/${n}.txt`, fixture };
+  const OUTPUT = /^(PLAY|TASK|RUNNING HANDLER) \[|^PLAY RECAP|^\S+ \| [A-Z]+|^\[(ERROR|WARNING)\]|^@all:$/m;
   for (const l of lessons) {
     for (const [, kind, stem, body] of read(l.md).matchAll(/(?:<!--\s*(output|fixture):\s*(\S+?)\s*-->\s*)?```[^\n]*\n([\s\S]*?)```/g)) {
       if (kind) assert.equal(norm(body), norm(read(from[kind](stem))), `${l.md}: block after ${kind}: ${stem} differs from ${from[kind](stem)}`);
-      else assert.doesNotMatch(body, /^(PLAY|TASK|RUNNING HANDLER) \[|^PLAY RECAP|^\S+ \| [A-Z]+|^\[(ERROR|WARNING)\]|^@all:$/m, `${l.md}: Ansible output without an output marker`);
+      else assert.doesNotMatch(body, OUTPUT, `${l.md}: Ansible output without an output marker`);
+    }
+    for (const e of l.exercises) {
+      for (const text of [e.task, e.question, e.code, ...(e.options ?? []).flatMap((o) => [o.text, o.why])].filter(Boolean)) {
+        assert.doesNotMatch(String(text), OUTPUT, `${e.id}: Ansible output in exercise text`);
+      }
     }
   }
 });
