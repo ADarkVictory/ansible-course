@@ -1,0 +1,13 @@
+[ERROR]: Task failed: The 'ansible.builtin.bigip_facts' module has been removed. bigip_facts has been removed please use bigip_device_info module. This feature was removed from ansible-core in a release after 2019-11-06.
+Origin: <adhoc 'bigip_facts' task>
+
+{'action': 'bigip_facts', 'args': {}, 'timeout': 0, 'async_val': 0, 'poll': 15}
+
+web1 | FAILED! => {
+    "changed": false,
+    "msg": "Task failed: The 'ansible.builtin.bigip_facts' module has been removed. bigip_facts has been removed please use bigip_device_info module. This feature was removed from ansible-core in a release after 2019-11-06."
+}
+web2 | FAILED! => {
+    "changed": false,
+    "msg": "Task failed: The 'ansible.builtin.bigip_facts' module has been removed. bigip_facts has been removed please use bigip_device_info module. This feature was removed from ansible-core in a release after 2019-11-06."
+}

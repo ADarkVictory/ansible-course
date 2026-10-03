@@ -194,8 +194,8 @@ export function parseCommand(line, registry) {
   const { flags, pos, error } = parseArgv(argv);
   if (error) return { program, hint: error };
   const { 'module-name': mod = 'command', args: text = '', ...rest } = flags;
-  const { module, spec, real } = lookup(mod, registry);
-  if (real && !spec) return { program, hint: notSimulated(mod) };
+  const { module, spec, real, twin, tombstone } = lookup(mod, registry);
+  if (real && !spec && !tombstone) return { program, hint: notSimulated(mod) };
   let typed = {};
   if (text) {
     let json;
@@ -206,9 +206,9 @@ export function parseCommand(line, registry) {
   const rawParams = Boolean(spec && '_raw_params' in typed && !spec.freeform);
   return {
     program, pattern: pos[0], module, args: spec ? normalise(spec, { ...typed }) : { ...typed }, flags: rest,
-    mod, known: Boolean(spec), typedArgs: typed, rawParams,
+    mod, known: real, tombstone, typedArgs: typed, rawParams,
     noArg: !text && (module === 'ansible.builtin.command' || module === 'ansible.builtin.shell'),
-    unsupported: spec && !rawParams ? unsupportedMsg(spec, mod, typed, module !== fqcn(mod)) : undefined,
+    unsupported: spec && !rawParams ? unsupportedMsg(spec, mod, typed, twin) : undefined,
   };
 }
 
@@ -368,7 +368,8 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
     key = k;
   }
   if (mod === undefined) return err('no module/action detected in task.', at(tnode));
-  const { module, spec, real } = lookup(mod, registry);
+  const { module, spec, real, twin, tombstone } = lookup(mod, registry);
+  if (tombstone) return err(tombstone.message, at(tnode)); // golden: tombstone-include, tombstone-module
   if (real && !spec) return { error: '', hint: notSimulated(mod) };
   if (!spec) return err(`couldn't resolve module/action '${mod}'. This often indicates a misspelling, missing collection, or incorrect module path.`, at(tnode));
 
@@ -390,7 +391,7 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
     if (/^\{\{[\s\S]*\}\}$/.test(args._raw_params)) delete args._raw_params;
     else task.rawParams = child(tnode, key)?.key ?? tnode; // the action key's node; the caller turns it into { line, col }
   }
-  const bad = !task.rawParams && unsupportedMsg(spec, mod, args, module !== fqcn(mod));
+  const bad = !task.rawParams && unsupportedMsg(spec, mod, args, twin);
   if (bad) task.unsupported = bad;
   normalise(spec, args);
   return task;
@@ -398,24 +399,34 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
 
 // Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
 // The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
-function unsupportedMsg(spec, mod, args, redirected) {
+function unsupportedMsg(spec, mod, args, twin) {
   const [, names, aliases = ''] = /^(.*?)(?: \((.*)\))?\.$/.exec(spec.supported);
   const legal = new Set([...spec.params, ...Object.keys(spec.aliases), ...`${names}, ${aliases}`.split(', ')]);
   const bad = Object.keys(args).filter((k) => !legal.has(k)).sort();
-  const ran = redirected ? mod : spec.reports_as[mod.includes('.') ? 'fqcn' : 'short']; // a redirect alias runs under the name typed
+  const ran = twin ? mod : spec.reports_as[mod.includes('.') ? 'fqcn' : 'short']; // a twin runs under the name typed
   if (bad.length) return `Unsupported parameters for (${ran}) module: ${bad.join(', ')}. Supported parameters include: ${spec.supported}`;
 }
 
 const fqcn = (name) => name.includes('.') ? name : `ansible.builtin.${name}`;
 const notSimulated = (mod) => `This course doesn't simulate ${mod} yet.`;
 
-// A module name as real Ansible resolves it (modules.yaml: `known` lists every real ansible.builtin module, `redirects` the aliases of
-// simulated ones). module/spec: the simulated module it runs; real: Ansible resolves the name even when the course has no spec for it,
-// so only a name with real === false gets Ansible's "couldn't resolve" error.
+// A module name as real Ansible resolves it, from modules.yaml: `known` lists every real ansible.builtin module, `twins` and `redirects`
+// map aliases to simulated modules, `tombstones` hold removed names with Ansible's text. ansible.legacy.<x> resolves as ansible.builtin.<x>,
+// but its output names are not captured, so the course does not simulate it.
+//   module/spec: the simulated module the name runs as; twin: it is named as typed in "Unsupported parameters" (a redirect runs as its target);
+//   tombstone: removed; real: Ansible resolves the name even when the course has no spec for it. Only a name that is not real gets
+//   Ansible's "couldn't resolve" / "Cannot resolve" error.
 function lookup(name, registry) {
   const fq = fqcn(name);
-  const module = registry.redirects?.[fq] ?? fq;
-  return { module, spec: registry[module], real: Boolean(registry[module]) || Boolean(registry.known?.includes(fq.replace(/^ansible\.(builtin|legacy)\./, ''))) };
+  const legacy = fq.startsWith('ansible.legacy.');
+  const builtin = legacy ? fq.replace('ansible.legacy.', 'ansible.builtin.') : fq;
+  const twin = registry.twins?.[builtin];
+  const module = registry.redirects?.[builtin] ?? twin ?? builtin;
+  const tombstone = registry.tombstones?.[builtin];
+  return {
+    module, twin: Boolean(twin), tombstone, spec: legacy || tombstone ? undefined : registry[module],
+    real: Boolean(tombstone || registry[module] || registry.known?.includes(builtin.replace('ansible.builtin.', ''))),
+  };
 }
 
 // Aliases are accepted by Ansible; checks compare canonical names.

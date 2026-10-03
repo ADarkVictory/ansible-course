@@ -469,5 +469,20 @@ known:
 - wait_for
 - wait_for_connection
 - yum_repository
-redirects:
+twins:
   ansible.builtin.systemd: ansible.builtin.systemd_service
+redirects:
+  ansible.builtin.yum: ansible.builtin.dnf
+tombstones:
+  ansible.builtin.include:
+    kind: action
+    message: The 'ansible.builtin.include' action plugin has been removed. Use include_tasks or import_tasks instead. This feature was removed from ansible-core in a release after 2023-05-16.
+  ansible.builtin.bigip_asm_policy:
+    kind: module
+    message: The 'ansible.builtin.bigip_asm_policy' module has been removed. bigip_asm_policy has been removed please use bigip_asm_policy_manage instead. This feature was removed from ansible-core in a release after 2019-11-06.
+  ansible.builtin.bigip_facts:
+    kind: module
+    message: The 'ansible.builtin.bigip_facts' module has been removed. bigip_facts has been removed please use bigip_device_info module. This feature was removed from ansible-core in a release after 2019-11-06.
+  ansible.builtin.bigip_gtm_facts:
+    kind: module
+    message: The 'ansible.builtin.bigip_gtm_facts' module has been removed. bigip_gtm_facts has been removed please use bigip_device_info module. This feature was removed from ansible-core in a release after 2019-11-06.

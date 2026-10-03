@@ -18,7 +18,7 @@ const CURLY_HINT = 'Your keyboard inserted curly quotes; use straight quotes.';
 // (no warnings, no inventory noise), so each error golden is compared whole, byte for byte.
 const errorGoldens = ['yaml-indent', 'yaml-tab', 'yaml-colon', 'yaml-unclosed-quote', 'yaml-dedent', 'yaml-mapping-values',
   'empty', 'not-a-list', 'unknown-module', 'unknown-play-keyword', 'task-keyword-typo', 'no-action', 'task-not-a-dict',
-  'hosts-missing'];
+  'hosts-missing', 'tombstone-include', 'tombstone-module'];
 
 for (const n of errorGoldens) {
   test(`${n}: error is the real ansible-core output`, () => {
@@ -162,4 +162,13 @@ test('a real module the course does not simulate: a hint, no invented error; a r
   assert.deepEqual(parse(pb('ansible.builtin.raw')), { error: '', hint: "This course doesn't simulate ansible.builtin.raw yet." });
   assert.equal(parse(`- hosts: web\n  tasks:\n    - systemd:\n        name: nginx\n`).plays[0].tasks[0].module, 'ansible.builtin.systemd_service');
   assert.match(parse(pb('stta')).error, /^\[ERROR\]: couldn't resolve module\/action 'stta'/);
+});
+
+test('yum (and ansible.builtin.yum) run as dnf; removed names (include) are not a "does not simulate" hint', () => {
+  for (const m of ['yum', 'ansible.builtin.yum']) {
+    const t = parse(`- hosts: web\n  tasks:\n    - ${m}:\n        name: nginx\n`).plays[0].tasks[0];
+    assert.equal(t.module, 'ansible.builtin.dnf');
+    assert.equal(t.unsupported, undefined);
+  }
+  assert.equal(parse(fixture('tombstone-include')).hint, undefined);
 });

@@ -25,7 +25,7 @@ mkdir -p "$out"
 cd /home/student || exit 1
 
 for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param unknown-play-keyword task-keyword-typo \
-         yaml-colon yaml-unclosed-quote yaml-dedent yaml-mapping-values no-action task-not-a-dict hosts-missing args-unbalanced-quote raw-params missing-handler \
+         yaml-colon yaml-unclosed-quote yaml-dedent yaml-mapping-values no-action task-not-a-dict hosts-missing args-unbalanced-quote raw-params missing-handler tombstone-include tombstone-module yum-unsupported \
          run-sample run-sample-second run-no-facts run-idempotency run-idempotency-second adhoc-ping; do
   src=${f%-second}
   [ "$src" != "$f" ] || rm -rf /tmp/web1 /tmp/web2   # fresh hosts; the second run must see the first run's state
@@ -55,6 +55,9 @@ adhoc adhoc-no-hosts nosuch -m ping
 adhoc adhoc-no-command-arg web
 adhoc adhoc-no-hosts-no-arg nosuch -m shell
 adhoc adhoc-yml-pattern playbook.yml
+adhoc adhoc-include-tombstone web -m include
+adhoc adhoc-module-tombstone web -m bigip_facts
+adhoc adhoc-yum-unsupported web -m yum -a 'name=x use_backend=dnf4 bogus=1'
 adhoc adhoc-unsupported-param-redirect web -m systemd -a 'name=x bogus=1'
 adhoc adhoc-limit 'web:db' -m ping --limit prod
 adhoc adhoc-limit-empty web -m ping --limit db

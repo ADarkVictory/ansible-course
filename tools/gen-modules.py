@@ -58,18 +58,33 @@ for m in MODULES:
 for m, backend in {"package": "dnf", "service": "systemd_service"}.items():
     out["ansible.builtin." + m]["aliases"] |= out["ansible.builtin." + backend]["aliases"]
 # Every real ansible.builtin module (short names), so a module the course does not simulate yet is told apart from a typo.
-# `redirects`: real names whose module file is byte-identical to a simulated module's (systemd is systemd_service); they resolve to it.
-import ansible.modules
+#   twins:      real names whose module file is byte-identical to a simulated module's (systemd is systemd_service); they run as it and
+#               are named as typed in "Unsupported parameters".
+#   redirects:  ansible_builtin_runtime.yml action routing to another ansible.builtin name (yum -> dnf); they run as the target.
+#   tombstones: removed names and the exact text ansible-core 2.21.4 prints for them; `kind` is the routing section they come from
+#               (action: raised before the task runs, module: a failure at run time).
+import ansible, ansible.modules
 listed = json.loads(subprocess.check_output([doc, "-l", "-t", "module", "--json", "ansible.builtin"], text=True))
 known = sorted(n.removeprefix("ansible.builtin.") for n in listed)
 module_dir = Path(ansible.modules.__path__[0])
-redirects = {}
+twins = {}
 for n in known:
     for m in MODULES:
         if n != m and (module_dir / f"{n}.py").read_bytes() == (module_dir / f"{m}.py").read_bytes():
-            redirects["ansible.builtin." + n] = "ansible.builtin." + m
+            twins["ansible.builtin." + n] = "ansible.builtin." + m
+routing = yaml.safe_load((Path(ansible.__file__).parent / "config/ansible_builtin_runtime.yml").read_text())["plugin_routing"]
+redirects = {"ansible.builtin." + n: e["redirect"] for n, e in routing["action"].items() if e.get("redirect", "").startswith("ansible.builtin.")}
+tombstones = {}
+for section, kind, label in (("action", "action", "action plugin"), ("modules", "module", "module")):
+    for n, e in routing[section].items():
+        t = e.get("tombstone")
+        if t and "ansible.builtin." + n not in tombstones:
+            when = f"after {t['removal_date']}" if "removal_date" in t else sys.exit(f"gen-modules: tombstone {n} has no removal_date")
+            tombstones["ansible.builtin." + n] = {"kind": kind, "message": f"The 'ansible.builtin.{n}' {label} has been removed. {t['warning_text']} This feature was removed from ansible-core in a release {when}."}
 out["known"] = known
+out["twins"] = twins
 out["redirects"] = redirects
+out["tombstones"] = tombstones
 (root / "modules.yaml").write_text(yaml.safe_dump(out, sort_keys=False, width=1000))
 
 # Keyword sets, read from the real classes (2.21.4), not from memory. Written to keywords.yaml.

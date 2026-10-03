@@ -211,6 +211,12 @@ export function renderAdhoc(cmd, inventory, { stdout = '' } = {}) {
   const each = (line) => hosts.map(line).join('');
   const fatal = (msg) => each((h) => `${h} | FAILED! => ${dump({ changed: false, msg })}\n`);
   const task = `{'action': ${pyRepr(mod)}, 'args': ${pyRepr(cmd.typedArgs)}, 'timeout': 0, 'async_val': 0, 'poll': 15}`;
+  // A removed name: an action is refused before the task runs, a module fails at run time. Golden: adhoc-include-tombstone, adhoc-module-tombstone.
+  if (cmd.tombstone) {
+    const { kind, message } = cmd.tombstone;
+    if (kind === 'action') return `${out}[ERROR]: ${message}\n`;
+    return `${out}[ERROR]: Task failed: ${message}\nOrigin: <adhoc '${mod}' task>\n\n${task}\n\n${fatal(`Task failed: ${message}`)}`;
+  }
   // Golden: adhoc-unknown-module, adhoc-raw-params. Raised while preparing the task, so Ansible wraps it as "Task failed." caused by the -m option.
   const why = !cmd.known ? `Cannot resolve '${mod}' to an action or module.` : cmd.rawParams && `Action '${cmd.module}' does not support raw params.`;
   if (why) {

@@ -96,6 +96,22 @@ test('a real module the course does not simulate: a hint and no invented error; 
   assert.match(run('ansible web -m stta').output, /^\[ERROR\]: Task failed: Cannot resolve 'stta'/);
 });
 
+test('yum runs as dnf; include and removed modules print the real removal text; typos keep the resolve error', () => {
+  for (const m of ['yum', 'ansible.builtin.yum']) {
+    const c = parseCommand(`ansible web -m ${m} -a "name=nginx state=present"`, registry);
+    assert.equal(c.module, 'ansible.builtin.dnf');
+    assert.equal(run(`ansible web -m ${m} -a "name=nginx"`, {}, [{ module: 'dnf', args: { name: 'nginx' } }]).ok, true);
+  }
+  assert.equal(run("ansible web -m yum -a 'name=x use_backend=dnf4 bogus=1'").output, golden('adhoc-yum-unsupported'));
+  for (const m of ['include', 'ansible.builtin.include', 'ansible.legacy.include']) {
+    assert.deepEqual(run(`ansible web -m ${m}`, {}, [{ module: 'ping', hint: 'h' }]), { ok: false, output: golden('adhoc-include-tombstone') }, m);
+  }
+  assert.match(run('ansible web -m ansible.builtin.bigip_facts').output, /^\[ERROR\]: Task failed: The 'ansible.builtin.bigip_facts' module has been removed[^\n]*\nOrigin: <adhoc 'ansible.builtin.bigip_facts' task>\n/);
+  assert.equal(run('ansible web -m bigip_facts').output, golden('adhoc-module-tombstone'));
+  assert.equal(run('ansible nosuch -m include').output, golden('adhoc-no-hosts'));
+  assert.match(run('ansible web -m ec2_instance').output, /^\[ERROR\]: Task failed: Cannot resolve 'ec2_instance'/);
+});
+
 test('a redirect alias resolves to the simulated module (systemd is systemd_service); the error names it as typed', () => {
   const c = parseCommand('ansible web -m systemd -a "name=nginx state=started"', registry);
   assert.equal(c.module, 'ansible.builtin.systemd_service');

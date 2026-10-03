@@ -1,0 +1,13 @@
+[ERROR]: Task failed: Module failed: Unsupported parameters for (ansible.legacy.dnf) module: bogus. Supported parameters include: allow_downgrade, allowerasing, autoremove, best, bugfix, cacheonly, conf_file, disable_excludes, disable_gpg_check, disable_plugin, disablerepo, download_dir, download_only, enable_plugin, enablerepo, exclude, install_weak_deps, installroot, list, lock_timeout, name, nobest, releasever, security, skip_broken, sslverify, state, update_cache, update_only, use_backend, validate_certs (expire-cache, pkg).
+Origin: <adhoc 'yum' task>
+
+{'action': 'yum', 'args': {'name': 'x', 'use_backend': 'dnf4', 'bogus': '1'}, 'timeout': 0, 'async_val': 0, 'poll': 15}
+
+web1 | FAILED! => {
+    "changed": false,
+    "msg": "Unsupported parameters for (ansible.legacy.dnf) module: bogus. Supported parameters include: allow_downgrade, allowerasing, autoremove, best, bugfix, cacheonly, conf_file, disable_excludes, disable_gpg_check, disable_plugin, disablerepo, download_dir, download_only, enable_plugin, enablerepo, exclude, install_weak_deps, installroot, list, lock_timeout, name, nobest, releasever, security, skip_broken, sslverify, state, update_cache, update_only, use_backend, validate_certs (expire-cache, pkg)."
+}
+web2 | FAILED! => {
+    "changed": false,
+    "msg": "Unsupported parameters for (ansible.legacy.dnf) module: bogus. Supported parameters include: allow_downgrade, allowerasing, autoremove, best, bugfix, cacheonly, conf_file, disable_excludes, disable_gpg_check, disable_plugin, disablerepo, download_dir, download_only, enable_plugin, enablerepo, exclude, install_weak_deps, installroot, list, lock_timeout, name, nobest, releasever, security, skip_broken, sslverify, state, update_cache, update_only, use_backend, validate_certs (expire-cache, pkg)."
+}
