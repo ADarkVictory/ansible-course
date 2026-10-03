@@ -22,7 +22,9 @@ else
   bin="$root/.venv/bin"
 fi
 
-export PATH="$bin:$PATH" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 ANSIBLE_FORKS=1 COLUMNS=80 LC_ALL=C.UTF-8
+# PYTHONUNBUFFERED: Ansible writes stdout and stderr with no flush of its own, so into one file the order of [WARNING] lines against
+# stdout depends on buffering (it differed between machines). Unbuffered, the file holds them in emission order.
+export PATH="$bin:$PATH" PYTHONUNBUFFERED=1 ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 ANSIBLE_FORKS=1 COLUMNS=80 LC_ALL=C.UTF-8
 inv="$root/tools/fixtures/inventory.ini"
 out="$root/tests/golden"
 mkdir -p "$out"
