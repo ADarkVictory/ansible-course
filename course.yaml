@@ -1,0 +1,6 @@
+modules:
+  - dir: 01-foundations
+    title: Foundations
+    lessons:
+      - file: 01-what-is-ansible
+        title: What is Ansible?

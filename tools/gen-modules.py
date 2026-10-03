@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes modules.yaml (from ansible-doc and real module runs) and keywords.yaml (from ansible-core's classes). Run: .venv/bin/python tools/gen-modules.py (after tools/capture.sh made the venv)."""
+"""Writes modules.yaml (from ansible-doc and real module runs) and keywords.yaml (from ansible-core's classes). Run: python tools/gen-modules.py, with the Python that has ansible-core 2.21.4 (.venv/bin/python locally; after tools/capture.sh made the venv)."""
 import json, operator, os, re, subprocess, sys
 from pathlib import Path
 import yaml

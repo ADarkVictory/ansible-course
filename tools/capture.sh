@@ -8,17 +8,21 @@
 #   list-hosts.json: ansible <pattern> --list-hosts over inventory-multi.ini      (tools/gen-hosts.py)
 # ANSIBLE_FORKS=1 keeps host order deterministic (web1 before web2); default forks=5 races.
 # <name>-second is <name>.yml run a second time with no cleanup in between.
-# Needs: uv, python3.13, and a writable /home/student (CI: sudo mkdir -p /home/student && sudo chown $USER /home/student).
+# Needs: ansible-core 2.21.4 (the .venv, an active environment, or uv + python3.13 to make the .venv) and a writable /home/student (CI: sudo mkdir -p /home/student && sudo chown $USER /home/student).
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p /home/student 2>/dev/null
 [ -w /home/student ] || { echo "capture.sh: /home/student must exist and be writable (sudo mkdir -p /home/student && sudo chown \$USER /home/student)" >&2; exit 1; }
 
-[ -x "$root/.venv/bin/ansible" ] || {
-  uv venv -p 3.13 "$root/.venv" && uv pip install -p "$root/.venv/bin/python" ansible-core==2.21.4
-} || exit 1
+# Which Python environment: the repo's .venv, else the already-active one (CI: setup-python + pip install ansible-core==2.21.4), else make .venv with uv.
+if [ -x "$root/.venv/bin/ansible" ]; then bin="$root/.venv/bin"
+elif command -v ansible >/dev/null; then bin=$(dirname "$(command -v ansible)")
+else
+  uv venv -p 3.13 "$root/.venv" && uv pip install -p "$root/.venv/bin/python" ansible-core==2.21.4 || exit 1
+  bin="$root/.venv/bin"
+fi
 
-export PATH="$root/.venv/bin:$PATH" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 ANSIBLE_FORKS=1 COLUMNS=80 LC_ALL=C.UTF-8
+export PATH="$bin:$PATH" ANSIBLE_NOCOLOR=1 ANSIBLE_FORCE_COLOR=0 ANSIBLE_FORKS=1 COLUMNS=80 LC_ALL=C.UTF-8
 inv="$root/tools/fixtures/inventory.ini"
 out="$root/tests/golden"
 mkdir -p "$out"
@@ -62,6 +66,6 @@ adhoc adhoc-unsupported-param-redirect web -m systemd -a 'name=x bogus=1'
 adhoc adhoc-limit 'web:db' -m ping --limit prod
 adhoc adhoc-limit-empty web -m ping --limit db
 adhoc adhoc-limit-unmatched nosuch -m ping --limit nosuch
-"$root/.venv/bin/python" "$root/tools/gen-hosts.py" "$invm" > "$out/list-hosts.json"
-"$root/.venv/bin/python" "$root/tools/gen-kv.py" > "$out/kv.json"
+"$bin/python" "$root/tools/gen-hosts.py" "$invm" > "$out/list-hosts.json"
+"$bin/python" "$root/tools/gen-kv.py" > "$out/kv.json"
 exit 0

@@ -1,0 +1,10 @@
+- id: what-is-ansible-1
+  type: choice
+  question: How does Ansible normally reach the servers it manages?
+  options:
+    - text: Over SSH, with no agent installed on the server
+      correct: true
+      why: Ansible is agentless. It connects over SSH and runs its modules with the server's own Python.
+    - text: Through an agent that must be installed on every server
+      correct: false
+      why: That describes agent-based tools such as Puppet. Ansible needs no agent.
