@@ -1,0 +1,329 @@
+ansible.builtin.ping:
+  params:
+  - data
+  aliases: {}
+  freeform: false
+ansible.builtin.command:
+  params:
+  - argv
+  - chdir
+  - cmd
+  - creates
+  - expand_argument_vars
+  - removes
+  - stdin
+  - stdin_add_newline
+  - strip_empty_ends
+  aliases: {}
+  freeform: true
+ansible.builtin.shell:
+  params:
+  - chdir
+  - cmd
+  - creates
+  - executable
+  - removes
+  - stdin
+  - stdin_add_newline
+  aliases: {}
+  freeform: true
+ansible.builtin.copy:
+  params:
+  - attributes
+  - backup
+  - checksum
+  - content
+  - decrypt
+  - dest
+  - directory_mode
+  - follow
+  - force
+  - group
+  - local_follow
+  - mode
+  - owner
+  - remote_src
+  - selevel
+  - serole
+  - setype
+  - seuser
+  - src
+  - unsafe_writes
+  - validate
+  aliases:
+    attr: attributes
+  freeform: false
+ansible.builtin.file:
+  params:
+  - access_time
+  - access_time_format
+  - attributes
+  - follow
+  - force
+  - group
+  - mode
+  - modification_time
+  - modification_time_format
+  - owner
+  - path
+  - recurse
+  - selevel
+  - serole
+  - setype
+  - seuser
+  - src
+  - state
+  - unsafe_writes
+  aliases:
+    attr: attributes
+    dest: path
+    name: path
+  freeform: false
+ansible.builtin.user:
+  params:
+  - append
+  - authorization
+  - comment
+  - create_home
+  - expires
+  - force
+  - generate_ssh_key
+  - group
+  - groups
+  - hidden
+  - home
+  - local
+  - login_class
+  - move_home
+  - name
+  - non_unique
+  - password
+  - password_expire_account_disable
+  - password_expire_max
+  - password_expire_min
+  - password_expire_warn
+  - password_lock
+  - profile
+  - remove
+  - role
+  - seuser
+  - shell
+  - skeleton
+  - ssh_key_bits
+  - ssh_key_comment
+  - ssh_key_file
+  - ssh_key_passphrase
+  - ssh_key_type
+  - state
+  - system
+  - uid
+  - uid_max
+  - uid_min
+  - umask
+  - update_password
+  aliases:
+    createhome: create_home
+    user: name
+  freeform: false
+ansible.builtin.group:
+  params:
+  - force
+  - gid
+  - gid_max
+  - gid_min
+  - local
+  - name
+  - non_unique
+  - state
+  - system
+  aliases: {}
+  freeform: false
+ansible.builtin.dnf:
+  params:
+  - allow_downgrade
+  - allowerasing
+  - autoremove
+  - best
+  - bugfix
+  - cacheonly
+  - conf_file
+  - disable_excludes
+  - disable_gpg_check
+  - disable_plugin
+  - disablerepo
+  - download_dir
+  - download_only
+  - enable_plugin
+  - enablerepo
+  - exclude
+  - install_weak_deps
+  - installroot
+  - list
+  - lock_timeout
+  - name
+  - nobest
+  - releasever
+  - security
+  - skip_broken
+  - sslverify
+  - state
+  - update_cache
+  - update_only
+  - use_backend
+  - validate_certs
+  aliases:
+    pkg: name
+    expire-cache: update_cache
+  freeform: false
+ansible.builtin.apt:
+  params:
+  - allow_change_held_packages
+  - allow_downgrade
+  - allow_unauthenticated
+  - auto_install_module_deps
+  - autoclean
+  - autoremove
+  - cache_valid_time
+  - clean
+  - deb
+  - default_release
+  - dpkg_options
+  - fail_on_autoremove
+  - force
+  - force_apt_get
+  - install_recommends
+  - lock_timeout
+  - name
+  - only_upgrade
+  - policy_rc_d
+  - purge
+  - state
+  - update_cache
+  - update_cache_retries
+  - update_cache_retry_max_delay
+  - upgrade
+  aliases:
+    allow-downgrade: allow_downgrade
+    allow-downgrades: allow_downgrade
+    allow_downgrades: allow_downgrade
+    allow-unauthenticated: allow_unauthenticated
+    default-release: default_release
+    install-recommends: install_recommends
+    package: name
+    pkg: name
+    update-cache: update_cache
+  freeform: false
+ansible.builtin.package:
+  params:
+  - name
+  - state
+  - use
+  aliases: {}
+  freeform: false
+ansible.builtin.service:
+  params:
+  - arguments
+  - enabled
+  - name
+  - pattern
+  - runlevel
+  - sleep
+  - state
+  - use
+  aliases:
+    args: arguments
+  freeform: false
+ansible.builtin.systemd_service:
+  params:
+  - daemon_reexec
+  - daemon_reload
+  - enabled
+  - force
+  - masked
+  - name
+  - no_block
+  - scope
+  - state
+  aliases:
+    daemon-reexec: daemon_reexec
+    daemon-reload: daemon_reload
+    service: name
+    unit: name
+  freeform: false
+ansible.builtin.lineinfile:
+  params:
+  - attributes
+  - backrefs
+  - backup
+  - create
+  - encoding
+  - firstmatch
+  - group
+  - insertafter
+  - insertbefore
+  - line
+  - mode
+  - owner
+  - path
+  - regexp
+  - search_string
+  - selevel
+  - serole
+  - setype
+  - seuser
+  - state
+  - unsafe_writes
+  - validate
+  aliases:
+    attr: attributes
+    value: line
+    dest: path
+    destfile: path
+    name: path
+    regex: regexp
+  freeform: false
+ansible.builtin.template:
+  params:
+  - attributes
+  - backup
+  - block_end_string
+  - block_start_string
+  - comment_end_string
+  - comment_start_string
+  - dest
+  - follow
+  - force
+  - group
+  - lstrip_blocks
+  - mode
+  - newline_sequence
+  - output_encoding
+  - owner
+  - selevel
+  - serole
+  - setype
+  - seuser
+  - src
+  - trim_blocks
+  - unsafe_writes
+  - validate
+  - variable_end_string
+  - variable_start_string
+  aliases:
+    attr: attributes
+  freeform: false
+ansible.builtin.debug:
+  params:
+  - msg
+  - var
+  - verbosity
+  aliases: {}
+  freeform: false
+ansible.builtin.setup:
+  params:
+  - fact_path
+  - filter
+  - gather_subset
+  - gather_timeout
+  aliases: {}
+  freeform: false

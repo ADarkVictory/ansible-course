@@ -1,0 +1,6 @@
+- hosts: web
+  tasks:
+    - name: Start nginx
+      ansible.builtin.serivce:
+        name: nginx
+        state: started

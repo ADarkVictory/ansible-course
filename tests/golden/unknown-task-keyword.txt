@@ -1,0 +1,8 @@
+[ERROR]: conflicting action statements: ansible.builtin.dnf, becom
+Origin: /home/student/playbook.yml:3:7
+
+1 - hosts: web
+2   tasks:
+3     - name: Install nginx
+        ^ column 7
+

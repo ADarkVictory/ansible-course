@@ -1,0 +1,6 @@
+- hosts: web
+  taks:
+    - name: Install nginx
+      ansible.builtin.dnf:
+        name: nginx
+        state: present

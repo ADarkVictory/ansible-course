@@ -1,0 +1,8 @@
+[ERROR]: YAML parsing failed: Tabs are usually invalid in YAML.
+Origin: /home/student/playbook.yml:3:1
+
+1 - hosts: web
+2   tasks:
+3  - name: Install nginx
+  ^ column 1
+

@@ -1,0 +1,19 @@
+- hosts: web
+  handlers:
+    - name: Say hello
+      ansible.builtin.debug:
+        msg: Handler ran
+  tasks:
+    - name: Create a directory
+      ansible.builtin.file:
+        path: "/tmp/{{ inventory_hostname }}"
+        state: directory
+        mode: "0755"
+    - name: Write a file
+      ansible.builtin.copy:
+        content: "Hello from {{ inventory_hostname }}\n"
+        dest: "/tmp/{{ inventory_hostname }}/hello.txt"
+        mode: "0644"
+      notify: Say hello
+    - name: Run a command
+      ansible.builtin.command: uptime

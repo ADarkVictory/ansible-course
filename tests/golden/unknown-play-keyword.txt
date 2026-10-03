@@ -1,0 +1,7 @@
+[ERROR]: 'taks' is not a valid attribute for a Play
+Origin: /home/student/playbook.yml:2:3
+
+1 - hosts: web
+2   taks:
+    ^ column 3
+

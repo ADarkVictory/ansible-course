@@ -1,0 +1,6 @@
+[ERROR]: A playbook must be a list of plays, got a <class 'ansible.module_utils._internal._datatag._AnsibleTaggedDict'> instead: /home/student/playbook.yml
+Origin: /home/student/playbook.yml:1:1
+
+1 hosts: web
+  ^ column 1
+

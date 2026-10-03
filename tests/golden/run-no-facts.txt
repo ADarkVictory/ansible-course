@@ -1,0 +1,11 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Create a directory] ******************************************************
+changed: [web1]
+changed: [web2]
+
+PLAY RECAP *********************************************************************
+web1                       : ok=1    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+web2                       : ok=1    changed=1    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+
