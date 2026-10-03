@@ -7,7 +7,7 @@
       why: Only the control node has Ansible installed. It copies each module to the server for the task and deletes it afterwards.
     - text: SSH access and Python 3.9 or newer
       correct: true
-      why: Ansible logs in over SSH and runs each module with the server's own Python. Nothing Ansible-specific is installed.
+      why: "Ansible logs in over SSH and runs each module with the server's own Python. Nothing Ansible-specific is installed. Check the version on older servers: below 3.9, every task fails with `Ansible requires Python 3.9 or newer on the target`."
     - text: An Ansible agent running, with a port open for the control node
       correct: false
       why: Agent-based tools work that way. Ansible has no agent; it connects over SSH.
@@ -25,7 +25,7 @@
     - text: The whole run stops, so that no servers are left in a different state
       correct: false
       why: By default one unreachable node does not stop the others. A play can be told to stop as soon as any node fails or cannot be reached, but that is not the default.
-    - text: "`db7` is reported unreachable, the other 49 are configured, and `db7` stays as it was until you run the playbook again"
+    - text: "The other 49 are configured; `db7` is reported unreachable and left as it was"
       correct: true
       why: Ansible pushes. An unreachable node is dropped from the run and the rest carry on. Nothing on `db7` will fetch the changes later.
     - text: Ansible keeps retrying `db7` until it comes back, then configures it

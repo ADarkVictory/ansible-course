@@ -1,6 +1,6 @@
 # Ad-hoc commands
 
-The `ansible` command runs one module on a set of hosts, straight from the command line, with no playbook. Engineers use it to check that hosts answer, to look something up on many servers at once, and for the occasional one-off fix.
+The `ansible` command runs one module on a set of hosts, straight from the command line, with no playbook.
 
 ## The command line
 
@@ -154,7 +154,7 @@ A comma works like a colon: `web,&prod`. Prefer it when a pattern holds IPv6 add
 Your shell reads the pattern before Ansible does:
 
 - `&` ends a command. `ansible web:&prod -m ping` runs `ansible web:` in the background, then a command named `prod`.
-- `!` starts bash's history expansion, even inside double quotes. In `"prod:!db"`, bash replaces `!db` with your last command that starts with `db`, or stops with `event not found`.
+- At an interactive bash prompt, `!` starts history expansion, even inside double quotes. In `"prod:!db"`, bash replaces `!db` with your last command that starts with `db`, or stops with `event not found`.
 
 Single quotes stop both: `ansible 'prod:!db' -m ping`. Quote every pattern that contains a symbol.
 
@@ -212,7 +212,7 @@ ansible web -b -m systemd_service -a 'name=nginx state=restarted'
 
 ## Ad-hoc or playbook?
 
-An ad-hoc command leaves no record but your shell history: no file, no review, nothing that applies it to the next server.
+An ad-hoc command leaves no record but your shell history: no file, no review.
 
 Ad hoc is right for:
 

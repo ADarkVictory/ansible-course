@@ -1,6 +1,6 @@
 # Checkpoint: Foundations
 
-Seven exercises that mix lessons 1 to 5. A wrong answer names the lesson to revisit. Nothing is locked: move on whenever you like.
+Seven exercises that mix lessons 1 to 5. A wrong answer names the lesson to revisit.
 
 <!-- exercise: checkpoint-1 -->
 
@@ -26,5 +26,3 @@ You can do each of these without looking back:
 - Tell which `ansible.cfg` is in use, and which layer wins when a setting is set in several places. (Lesson 3)
 - Target an intersection or an exclusion with a quoted pattern, and check it with `--list-hosts` before anything runs. (Lesson 4)
 - Name modules by FQCN in playbooks, and look them up with `ansible-doc`. (Lesson 5)
-
-If one feels shaky, reread the lesson in brackets before Module 2.

@@ -19,7 +19,7 @@ become_method = sudo
 become_user = root
 ```
 
-- `[defaults]` and `[privilege_escalation]` are sections. Each setting belongs to one, and Ansible reads it only there: `become = True` under `[defaults]` is ignored without a warning. So is a misspelt key.
+- `[defaults]` and `[privilege_escalation]` are sections. Most settings belong to one section, and Ansible reads them only there: `become = True` under `[defaults]` is ignored without a warning. So is a misspelt key.
 - A line starting with `#` or `;` is a comment. After a value, only `;` starts a comment: `remote_user = deploy # ops` sets the user to `deploy # ops`.
 
 `ansible-config list` documents every setting, with its default and where it can be set: section and key, environment variable.

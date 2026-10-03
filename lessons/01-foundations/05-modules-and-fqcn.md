@@ -1,6 +1,6 @@
 # Modules and FQCN
 
-Every task runs one module. This lesson covers how modules are named, how to read their documentation, why a module beats `shell`, and what a module reports back.
+Every task runs one module.
 
 ## What a module is
 
@@ -78,7 +78,7 @@ ansible-doc -l community.general
 
 It must be a full `namespace.collection`: `ansible-doc -l community` stops with `Invalid collection name`.
 
-Modules are one plugin type among several. `-t` picks another, such as `-t lookup`; later lessons use them.
+Modules are one plugin type among several. `-t` picks another, such as `-t lookup`.
 
 <!-- exercise: modules-and-fqcn-3 -->
 
@@ -99,7 +99,7 @@ These two tasks both install nginx:
 - `dnf` first checks which packages are installed. If nginx is, it does nothing and reports `ok`.
 - `shell` runs the command on every run and reports `changed` every time (lesson 1). Ansible cannot see that yum had nothing to do.
 
-A `changed` that means nothing hides the changes that matter. ansible-lint flags the shell task with `command-instead-of-module` and `no-changed-when`. "Use the module" is one of the most common review comments on Ansible code.
+A `changed` that means nothing hides the changes that matter. ansible-lint flags the shell task with `command-instead-of-module` and `no-changed-when`.
 
 `dnf`'s `state`:
 
@@ -109,7 +109,7 @@ A `changed` that means nothing hides the changes that matter. ansible-lint flags
 
 Old playbooks use `yum:`. The yum backend was removed in ansible-core 2.17, and `yum` is now only a redirect to `ansible.builtin.dnf`: `ansible-doc yum` finds nothing, and ansible-lint asks for `ansible.builtin.dnf`.
 
-Keep `command` and `shell` for jobs no module does. Later lessons show how to make them report honestly.
+Keep `command` and `shell` for jobs no module does.
 
 <!-- exercise: modules-and-fqcn-4 -->
 

@@ -1,6 +1,6 @@
 - id: checkpoint-1
   type: choice
-  question: "Last night a colleague ran `ansible prod -b -m dnf -a 'name=chrony state=present'`. `web2` was powered off and reported `UNREACHABLE!`; every other prod host reported `CHANGED`. This morning `web2` is back, and she runs the same line again. What does it report?"
+  question: "Last night a colleague ran `ansible prod -b -m dnf -a 'name=chrony state=present'`. No prod host had chrony yet. `web2` was powered off and reported `UNREACHABLE!`; every other prod host reported `CHANGED`. This morning `web2` is back, and she runs the same line again. What does it report?"
   options:
     - text: "`web2` reports `CHANGED`; every other host reports `SUCCESS`, with `\"changed\": false`"
       correct: true
@@ -65,7 +65,7 @@
 
 - id: checkpoint-4
   type: choice
-  question: "Same commit, same command, both run from the repository root. On your laptop, `ansible 'web:&prod' --list-hosts` lists `web1` and `web2`; in the CI job it lists `web7`. The project's `ansible.cfg` sets `inventory = inventory.ini`. What is the likely cause?"
+  question: "Same commit, same command, both run from the repository root. On your laptop, `ansible 'web:&prod' --list-hosts` lists `web1` and `web2`; in the CI job it lists `web7` and prints no warnings. The project's `ansible.cfg` sets `inventory = inventory.ini`. What is the likely cause?"
   options:
     - text: "`--list-hosts` ignores `ansible.cfg` and reads `/etc/ansible/hosts`, which differs on the CI runner"
       correct: false
@@ -86,7 +86,7 @@
   options:
     - text: The managed nodes in CI lack the firewalld module and need it installed
       correct: false
-      why: Nothing Ansible-specific is installed on managed nodes. The control node copies each module over for the task, so the control node must have it. Revisit lesson 1, Agentless, SSH and Python.
+      why: "Nothing Ansible-specific is installed on managed nodes. The control node copies each module over for the task, so the control node must have it. Revisit lesson 1, Agentless: SSH and Python."
     - text: Short names work only ad hoc; a playbook needs the FQCN
       correct: false
       why: Short names run in playbooks too. ansible-lint flags them, but Ansible does not refuse them, and the same task runs on your laptop. Revisit lesson 5, Short names are ambiguous.
@@ -373,6 +373,38 @@
                 staging:
                 dev:
       fails: 6
+    # staging nested under dev: nonprod still names both, but dev now holds a group too.
+    - code: |
+        all:
+          children:
+            web:
+              hosts:
+                web1:
+                web2:
+                web3:
+                dev1:
+            db:
+              hosts:
+                db1:
+                db2:
+                dev1:
+            prod:
+              hosts:
+                web1:
+                web2:
+                db1:
+            nonprod:
+              children:
+                dev:
+                  hosts:
+                    dev1:
+                  children:
+                    staging:
+                      hosts:
+                        web3:
+                        db2:
+                staging:
+      fails: 5
 
 - id: checkpoint-7
   type: command

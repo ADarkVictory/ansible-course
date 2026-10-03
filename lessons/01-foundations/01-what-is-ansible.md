@@ -12,7 +12,7 @@ Ansible (the `ansible-core` Python package) is installed on the control node onl
 
 ## Agentless: SSH and Python
 
-Nothing Ansible-specific is installed or left running on a managed node: no agent, no daemon, no extra port. A managed node needs:
+Nothing Ansible-specific is installed or left running on a managed node: no agent, no daemon, no extra port. A Linux or Unix managed node needs:
 
 - SSH access for the user Ansible logs in as
 - Python 3.9 or newer
@@ -47,7 +47,7 @@ In companies, runs often start from a CI pipeline or from Ansible Automation Pla
 
 A shell script is **imperative**: it lists steps. `mkdir /tmp/app` means "create it", and fails if it exists.
 
-An Ansible task is **declarative**: it states a result. "`/tmp/app` is a directory with mode `0755`" is either true or not. The module checks, and acts only if it is not.
+A task that uses a module such as `file` is **declarative**: it states a result. "`/tmp/app` is a directory with mode `0755`" is either true or not. The module checks, and acts only if it is not.
 
 A **playbook** is a YAML file holding a list of **plays**. Each play names its hosts and the tasks to run on them. A complete playbook with one play:
 
@@ -71,7 +71,7 @@ A **playbook** is a YAML file holding a list of **plays**. Each play names its h
 - `gather_facts: false`: skips collecting details about each node first; this playbook does not need them.
 - Each task here has a `name` (a label for the output) and one module: `ansible.builtin.file` manages files and directories, `ansible.builtin.shell` runs a shell command.
 
-Tasks run top to bottom, in the order written. Each task declares a state, but Ansible never reorders tasks for you.
+Tasks run top to bottom, in the order written. A task can declare a state, but Ansible never reorders tasks for you.
 
 The second task is not declarative: it is a command, not a state.
 

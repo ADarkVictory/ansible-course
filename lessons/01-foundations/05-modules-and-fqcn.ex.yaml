@@ -59,7 +59,7 @@
 
 - id: modules-and-fqcn-4
   type: write
-  task: "This task from an old project fails ansible-lint twice: a short module name, and `shell` where a module exists. Rewrite it with `ansible.builtin.dnf` so that nginx is installed. Keep the names."
+  task: "This task from an old project fails ansible-lint twice: a short module name, and `shell` where a module exists. Rewrite it with `ansible.builtin.dnf` so that nginx is installed and the playbook passes ansible-lint. Keep the names."
   inventory: { web: [web1, web2] }
   fqcn: true
   fqcn_hint: Name every module by its FQCN, ansible.builtin.<module>. ansible.builtin.yum does not count, as it only redirects to another module.
@@ -84,9 +84,9 @@
       hint: The shell task is still there. Ansible cannot see what its command did, so it reports changed on every run. Let a module do the job.
     - forbid: { module: command }
       hint: command has the same problem as shell. Use a module that knows which packages are installed.
-    - task: { module: dnf }
+    - task: { module: dnf, name: Install nginx }
       has: { name: nginx }
-      hint: Use ansible.builtin.dnf, and give it the package through its name parameter.
+      hint: Use ansible.builtin.dnf in the task named Install nginx, and give it the package through its name parameter.
     - forbid: { module: dnf }
       has: { state: latest }
       hint: latest also upgrades nginx whenever a newer package appears, and ansible-lint's package-latest rule rejects it. Which state means installed, at any version?
@@ -96,6 +96,8 @@
     - forbid: { module: dnf }
       has: { state: removed }
       hint: removed is another name for absent. The task must install the package.
+    - play: { name: Set up the web servers }
+      hint: Keep the play's name, Set up the web servers. ansible-lint's name rule wants every play named.
   right:
     - |
       - name: Set up the web servers
@@ -191,6 +193,35 @@
                 name: nginx
                 state: install
       fails: error
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - ansible.builtin.dnf:
+                name: nginx
+                state: present
+      fails: 3
+    - code: |
+        - hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.dnf:
+                name: nginx
+                state: present
+      fails: 7
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.dnf:
+                name: nginx
+                state: present
+              when: false
+      fails: hint
 
 - id: modules-and-fqcn-5
   type: choice

@@ -53,7 +53,7 @@
   type: choice
   question: In the repository root, `ansible-playbook playbooks/site.yml` works. A colleague runs `cd playbooks`, then `ansible-playbook site.yml`, and Ansible warns that no inventory was parsed. The project's `ansible.cfg`, with `inventory = inventory.ini`, is in the root. Why?
   options:
-    - text: Ansible looks for `ansible.cfg` only in the current directory, `playbooks/`, so it never read the project file
+    - text: Ansible looks for a project `ansible.cfg` only in the current directory, `playbooks/`, so it never read the one in the root
       correct: true
       why: Ansible does not search parent directories. `ansible --version` in `playbooks/` shows which file, if any, it found instead. Run from the root, or set `ANSIBLE_CONFIG`.
     - text: Ansible looks for `ansible.cfg` next to the playbook, and `playbooks/` has none

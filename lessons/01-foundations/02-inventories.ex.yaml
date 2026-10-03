@@ -139,6 +139,18 @@
             cache:
               redis1:
       fails: 2
+    - code: |
+        all:
+          children:
+            app:
+              hosts:
+                app1:
+                app2:
+              children:
+                cache:
+                  hosts:
+                    redis1:
+      fails: 1
 
 - id: inventories-5
   type: write
@@ -238,3 +250,36 @@
                     api1:
                     api2:
       fails: 4
+    - code: |
+        all:
+          hosts:
+            monitor1:
+          children:
+            frontend:
+              hosts:
+                lb1:
+              children:
+                lb:
+                  hosts:
+                    lb1:
+                api:
+                  hosts:
+                    api1:
+                    api2:
+      fails: 1
+    - code: |
+        all:
+          hosts:
+            monitor1:
+          children:
+            frontend:
+              children:
+                lb:
+                  hosts:
+                    lb1:
+                  children:
+                    api:
+                      hosts:
+                        api1:
+                        api2:
+      fails: 1

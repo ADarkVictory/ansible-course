@@ -131,6 +131,9 @@
   checks:
     - hosts: [web3]
       hint: Keep the pattern web and narrow it with --limit staging. Only hosts in both remain.
+    - module: systemd_service
+      args: { name: nginx, state: restarted }
+      hint: Check the exact line you will run. Keep the runbook's module and arguments; only options are added.
     - flags: { list-hosts: true }
       hint: Add the option that prints the hosts and runs nothing.
   wrong:
@@ -138,8 +141,10 @@
       fails: 1
     - code: ansible staging -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
       fails: 1
-    - code: ansible web -b -m systemd_service -a 'name=nginx state=restarted' --limit staging
+    - code: ansible web3 --list-hosts
       fails: 2
+    - code: ansible web -b -m systemd_service -a 'name=nginx state=restarted' --limit staging
+      fails: 3
 
 - id: ad-hoc-commands-8
   type: choice
