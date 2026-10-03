@@ -16,9 +16,9 @@ const SCHEMA = yaml.YAML11_SCHEMA.withTags(
  * @param source   playbook text
  * @param registry parsed modules.yaml
  * @param keywords parsed keywords.yaml ({ play, task, block } from ansible-core)
- * @returns { plays, runtimeError?, hint? } | { error, hint? }
- *   runtimeError: { play, task, msg } for the first `tasks` entry real Ansible would fail at run time
- *   (unsupported parameters); the renderer turns it into the failed run.
+ * @returns { plays, hint? } | { error, hint? }
+ *   A task (in any list) whose parameters real Ansible would reject at run time carries `unsupported: <exact msg>`;
+ *   the renderer raises it when the task (or notified handler) runs.
  *   A hint next to plays (curly quotes) means the checker must still fail: real Ansible would run the wrong value.
  */
 export function parsePlaybook(source, registry, keywords) {
@@ -61,7 +61,6 @@ function parse(src, registry, kw) {
   if (!data.length) return err(`A playbook must contain at least one play: ${PATH}`);
 
   const plays = [];
-  let runtimeError;
   for (const [pi, ds] of data.entries()) {
     const pnode = root.items[pi];
     if (!isMap(ds)) return err("playbook entries must be either valid plays or 'import_playbook' statements", ctx(ds, pnode));
@@ -99,8 +98,7 @@ function parse(src, registry, kw) {
         // ponytail: block/rescue/always arrive with module 5; until then a block is an unresolved action 'block'.
         const task = parseTask(t, tnode, list === 'handlers', registry, kw, err, at, ctx);
         if (task.error) return task;
-        play[list].push(task.task);
-        if (list === 'tasks' && !runtimeError && task.unsupported) runtimeError = { play: pi, task: ti, msg: task.unsupported };
+        play[list].push(task);
       }
     }
     if ('hosts' in ds) {
@@ -117,7 +115,7 @@ function parse(src, registry, kw) {
   // ponytail: Ansible checks the required hosts when it reaches the play; for a later play that is after earlier plays ran.
   const missing = data.findIndex((p) => !('hosts' in p));
   if (missing >= 0) return err("The field 'hosts' is required but was not set.", at(root.items[missing]));
-  return runtimeError ? { plays, runtimeError } : { plays };
+  return { plays };
 }
 
 // Action resolution as in ansible-core's parsing/mod_args.py (parse with skip_action_validation, then resolve).
@@ -161,14 +159,15 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
   const task = { ...('name' in t && { name: t.name }), module, args, keywords };
 
   // Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
-  let unsupported;
+  // The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
   if (isMap(args)) {
     const [, names, aliases = ''] = /^(.*?)(?: \((.*)\))?\.$/.exec(spec.supported);
     const legal = new Set([...spec.params, ...Object.keys(spec.aliases), ...`${names}, ${aliases}`.split(', ')]);
     const bad = Object.keys(args).filter((k) => !legal.has(k)).sort();
-    if (bad.length) unsupported = `Unsupported parameters for (${mod}) module: ${bad.join(', ')}. Supported parameters include: ${spec.supported}`;
+    const ran = spec.reports_as[mod.includes('.') ? 'fqcn' : 'short'];
+    if (bad.length) task.unsupported = `Unsupported parameters for (${ran}) module: ${bad.join(', ')}. Supported parameters include: ${spec.supported}`;
   }
-  return { task, unsupported };
+  return task;
 }
 
 // ---- YAML errors -------------------------------------------------------------------------------------------------

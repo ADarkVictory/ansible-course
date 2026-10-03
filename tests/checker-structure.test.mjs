@@ -49,24 +49,46 @@ test('curly quotes that break YAML: the real YAML error plus the curly hint', ()
   assert.equal(r.hint, CURLY_HINT);
 });
 
-test('unsupported parameter: runtimeError msg equals the msg in the golden fatal line', () => {
+test('unsupported parameter: the task carries the msg from the golden fatal line', () => {
   const fatal = golden('unsupported-param').split('\n').find((l) => l.startsWith('fatal: [web1]'));
   const { msg } = JSON.parse(fatal.slice(fatal.indexOf('{')));
   const r = parse(fixture('unsupported-param'));
   assert.equal(r.error, undefined);
-  assert.deepEqual(r.runtimeError, { play: 0, task: 0, msg });
+  assert.equal(r.runtimeError, undefined);
   assert.equal(r.plays[0].tasks[0].module, 'ansible.builtin.file');
+  assert.equal(r.plays[0].tasks[0].unsupported, msg);
 });
 
-test('unsupported parameter: message names the module as written (ansible prints "(file)" for a short name)', () => {
+test('unsupported parameter: message names the module that ran ("(file)" for a short name, ansible.legacy.copy for copy)', () => {
   const r = parse('- hosts: web\n  tasks:\n    - file:\n        path: /tmp/x\n        pathh: 1\n');
-  assert.match(r.runtimeError.msg, /^Unsupported parameters for \(file\) module: pathh\. Supported parameters include: _diff_peek, /);
+  assert.match(r.plays[0].tasks[0].unsupported, /^Unsupported parameters for \(file\) module: pathh\. Supported parameters include: _diff_peek, /);
+  const copy = parse('- hosts: web\n  tasks:\n    - ansible.builtin.copy: {content: x, dest: /tmp/x, bogus: 1}\n');
+  assert.match(copy.plays[0].tasks[0].unsupported, /^Unsupported parameters for \(ansible\.legacy\.copy\) module: bogus\. /);
+});
+
+test('unsupported parameter: handlers and pre_tasks carry it too', () => {
+  const { plays } = parse([
+    '- hosts: web',
+    '  pre_tasks:',
+    '    - file: {path: /tmp/x, pathh: 1}',
+    '  tasks:',
+    '    - ping:',
+    '  handlers:',
+    '    - service: {name: nginx, state: restarted, enabeld: true}',
+    '',
+  ].join('\n'));
+  assert.equal(plays[0].pre_tasks[0].unsupported,
+    `Unsupported parameters for (file) module: pathh. Supported parameters include: ${registry['ansible.builtin.file'].supported}`);
+  // service runs the host's backend module, so the message names it (simulated hosts: systemd).
+  assert.equal(plays[0].handlers[0].unsupported,
+    `Unsupported parameters for (ansible.legacy.systemd) module: enabeld. Supported parameters include: ${registry['ansible.builtin.service'].supported}`);
+  assert.equal('unsupported' in plays[0].tasks[0], false);
 });
 
 test('aliases and internal parameters are not unsupported', () => {
   const r = parse('- hosts: web\n  tasks:\n    - file: { dest: /tmp/x, state: directory }\n    - shell: { cmd: uptime, strip_empty_ends: true }\n');
   assert.equal(r.plays[0].tasks.length, 2);
-  assert.equal(r.runtimeError, undefined);
+  for (const t of r.plays[0].tasks) assert.equal('unsupported' in t, false);
 });
 
 test('a parse error in a later play beats a runtime error in an earlier one', () => {

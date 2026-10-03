@@ -13,7 +13,7 @@ root = Path(__file__).resolve().parent.parent
 doc = Path(sys.executable).parent / "ansible-doc"  # not resolved: keep the venv's bin dir
 
 # Args that get each module past required-arg checks so the real "Unsupported parameters" message appears.
-# package and service are absent: they delegate to a host-dependent backend, handled after the loop below.
+# Simulated nodes are RHEL-family + systemd, so `use` pins package and service to the backend such a host picks.
 VALID = {
     "ping": {}, "apt": {}, "debug": {}, "setup": {},
     "command": {"cmd": "x"}, "shell": {"cmd": "x"},
@@ -21,19 +21,21 @@ VALID = {
     "user": {"name": "x"}, "group": {"name": "x"}, "dnf": {"name": "x", "use_backend": "dnf4"},
     "lineinfile": {"path": "/tmp/x"}, "template": {"src": "/dev/null", "dest": "/tmp/x"},
     "systemd_service": {"name": "x"},
+    "package": {"name": "x", "use": "dnf", "use_backend": "dnf4"}, "service": {"name": "x", "use": "systemd"},
 }
 env = {**os.environ, "ANSIBLE_NOCOLOR": "1", "ANSIBLE_FORCE_COLOR": "0", "ANSIBLE_FORKS": "1", "COLUMNS": "80", "LC_ALL": "C.UTF-8"}
 inventory = root / "tools/fixtures/inventory.ini"
 
-def supported(m):
-    """Text after 'Supported parameters include: ' through the final '.', from the real module run with a bogus param."""
+def unsupported(m, name):
+    """(module name the message reports, text after 'Supported parameters include: ' through the final '.'),
+    from the real module run as `name` with a bogus param."""
     args = json.dumps({**VALID[m], "zz_bogus": 1})
-    run = subprocess.run([doc.with_name("ansible"), "web1", "-i", inventory, "-m", "ansible.builtin." + m, "-a", args],
+    run = subprocess.run([doc.with_name("ansible"), "web1", "-i", inventory, "-m", name, "-a", args],
                          capture_output=True, text=True, env=env, cwd=root / "tools")
-    found = re.search(r"Supported parameters include: (.+\.)$", run.stdout + run.stderr, re.M)
+    found = re.search(r"Unsupported parameters for \((.+?)\) module: zz_bogus\. Supported parameters include: (.+\.)$", run.stdout + run.stderr, re.M)
     if not found:
-        sys.exit(f"gen-modules: no 'Supported parameters' message for {m}:\n{run.stdout}{run.stderr}")
-    return found.group(1)
+        sys.exit(f"gen-modules: no 'Supported parameters' message for {name}:\n{run.stdout}{run.stderr}")
+    return found.groups()
 
 docs = json.loads(subprocess.check_output([doc, "--json", *("ansible.builtin." + m for m in MODULES)], text=True))
 out = {}
@@ -47,11 +49,10 @@ for m in MODULES:
         "aliases": {a: n for n in names for a in sorted(opts[n].get("aliases") or [])},
         "freeform": m in FREEFORM,
     }
-    if m in VALID:
-        out[fq]["supported"] = supported(m)
-# Simulated nodes are RHEL-family + systemd; the real text depends on the host's backend, so package borrows dnf's and service systemd_service's.
-for m, backend in (("package", "dnf"), ("service", "systemd_service")):
-    out["ansible.builtin." + m]["supported"] = out["ansible.builtin." + backend]["supported"]
+    # The message names the module that actually ran (action plugins run e.g. ansible.legacy.copy), which also differs
+    # between the short and the FQCN spelling, so both are recorded.
+    (short, _), (long, out[fq]["supported"]) = unsupported(m, m), unsupported(m, fq)
+    out[fq]["reports_as"] = {"short": short, "fqcn": long}
 (root / "modules.yaml").write_text(yaml.safe_dump(out, sort_keys=False, width=1000))
 
 # Keyword sets, read from the real classes (2.21.4), not from memory. Written to keywords.yaml.
