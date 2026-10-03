@@ -18,7 +18,8 @@ const CURLY_HINT = 'Your keyboard inserted curly quotes; use straight quotes.';
 // (no warnings, no inventory noise), so each error golden is compared whole, byte for byte.
 const errorGoldens = ['yaml-indent', 'yaml-tab', 'yaml-colon', 'yaml-unclosed-quote', 'yaml-dedent', 'yaml-mapping-values',
   'empty', 'not-a-list', 'unknown-module', 'unknown-play-keyword', 'task-keyword-typo', 'no-action', 'task-not-a-dict',
-  'hosts-missing', 'tombstone-include', 'tombstone-module'];
+  'hosts-missing', 'tombstone-include', 'tombstone-module', 'hosts-empty', 'hosts-none', 'hosts-invalid', 'hosts-not-list',
+  'vars-not-dict', 'task-vars-not-dict', 'action-local-action', 'import-playbook'];
 
 for (const n of errorGoldens) {
   test(`${n}: error is the real ansible-core output`, () => {
@@ -28,9 +29,12 @@ for (const n of errorGoldens) {
   });
 }
 
-test('tabs: real error plus the tab hint', () => {
+test('tabs: real error plus the tab hint, only when the line Ansible points at holds the tab', () => {
   assert.equal(parse(fixture('yaml-tab')).hint, TAB_HINT);
   assert.equal(parse(fixture('yaml-indent')).hint, undefined);
+  const r = parse('- hosts: "web\t"\n  tasks: [\n');
+  assert.match(r.error, /^\[ERROR\]: YAML parsing failed/);
+  assert.equal(r.hint, undefined);
 });
 
 test('curly quotes in otherwise valid YAML: parses (as real Ansible does) but carries the hint', () => {
@@ -54,16 +58,128 @@ test('unsupported parameter: the task carries the msg from the golden fatal line
   const { msg } = JSON.parse(fatal.slice(fatal.indexOf('{')));
   const r = parse(fixture('unsupported-param'));
   assert.equal(r.error, undefined);
-  assert.equal(r.runtimeError, undefined);
   assert.equal(r.plays[0].tasks[0].module, 'ansible.builtin.file');
   assert.equal(r.plays[0].tasks[0].unsupported, msg);
 });
 
-test('unsupported parameter: message names the module that ran ("(file)" for a short name, ansible.legacy.copy for copy)', () => {
+test('unsupported parameter: message names the module that ran ("(file)" for a short name, ansible.legacy.dnf for yum)', () => {
   const r = parse('- hosts: web\n  tasks:\n    - file:\n        path: /tmp/x\n        pathh: 1\n');
   assert.match(r.plays[0].tasks[0].unsupported, /^Unsupported parameters for \(file\) module: pathh\. Supported parameters include: _diff_peek, /);
-  const copy = parse('- hosts: web\n  tasks:\n    - ansible.builtin.copy: {content: x, dest: /tmp/x, bogus: 1}\n');
-  assert.match(copy.plays[0].tasks[0].unsupported, /^Unsupported parameters for \(ansible\.legacy\.copy\) module: bogus\. /);
+  const yum = parse('- hosts: web\n  tasks:\n    - yum: {name: x, bogus: 1}\n');
+  assert.match(yum.plays[0].tasks[0].unsupported, /^Unsupported parameters for \(ansible\.legacy\.dnf\) module: bogus\. /);
+});
+
+// ---- what the course does not simulate: a hint and no output, never invented Ansible text (final review C1, I2) -----
+const notYet = (what) => ({ error: '', hint: `This course doesn't simulate \`${what}\` yet.` });
+const pb = (play, task = '') => `- hosts: web\n${play}  tasks:\n    - ansible.builtin.ping:\n${task}`;
+
+test('a play or task keyword the simulator does not model: a hint, never a plain run', () => {
+  for (const k of ['vars_files', 'roles', 'serial', 'max_fail_percentage', 'force_handlers', 'collections', 'module_defaults', 'strategy',
+    'ignore_errors', 'check_mode', 'run_once', 'vars_prompt', 'no_log']) {
+    assert.deepEqual(parse(pb(`  ${k}: x\n`)), notYet(k), k);
+  }
+  for (const k of ['when', 'failed_when', 'loop', 'with_items', 'ignore_errors', 'run_once', 'check_mode', 'diff', 'no_log', 'until',
+    'retries', 'async', 'module_defaults', 'collections', 'any_errors_fatal', 'loop_control']) {
+    assert.deepEqual(parse(pb('', `      ${k}: x\n`)), notYet(k), k);
+  }
+  assert.deepEqual(parse('- hosts: web\n  tasks:\n    - block:\n        - ansible.builtin.ping:\n'), notYet('block'));
+});
+
+test('keywords the simulator models, or that cannot change what Ansible prints here, still run', () => {
+  const play = '  name: P\n  gather_facts: false\n  become: true\n  become_user: root\n  remote_user: root\n  connection: local\n  port: 22\n'
+    + '  tags: [a]\n  environment: {A: b}\n  timeout: 30\n  throttle: 1\n  any_errors_fatal: true\n  vars: {v: 1}\n';
+  const task = '      become: true\n      become_user: root\n      register: r\n      tags: x\n      environment: {A: b}\n      timeout: 5\n'
+    + '      throttle: 1\n      remote_user: root\n      port: 22\n      connection: local\n      delegate_to: localhost\n      changed_when: false\n';
+  assert.ok(Array.isArray(parse(pb(play, task)).plays));
+});
+
+test('changed_when other than true or false is an expression the simulator cannot evaluate', () => {
+  for (const v of ['false', 'True', 'yes']) assert.ok(Array.isArray(parse(pb('', `      changed_when: ${v}\n`)).plays), v);
+  assert.deepEqual(parse(pb('', '      changed_when: "\'x\' in r.stdout"\n')),
+    { error: '', hint: "This course doesn't simulate a `changed_when` expression yet; use true or false." });
+});
+
+test('templates: only {{ name }} of a variable the play or task sets (or inventory_hostname); anything else is a hint', () => {
+  const ok = (src) => assert.ok(Array.isArray(parse(src).plays), src);
+  const refused = (src, tpl) => assert.deepEqual(parse(src), { error: '', hint: `This course doesn't simulate \`${tpl}\` yet: it works out only {{ name }} of a variable the play or task sets.` }, src);
+  const task = (args, vars = '') => `- hosts: web\n  vars:\n    app: shop\n    nested: "{{ app }}"\n  tasks:\n    - name: t\n      ${args}\n${vars}`;
+  ok(task('ansible.builtin.debug: msg="{{ app }} on {{ inventory_hostname }}"'));
+  ok(task('ansible.builtin.debug: msg="{{ x }}"', '      vars:\n        x: 1\n'));
+  refused(task('ansible.builtin.debug: msg="{{ nope }}"'), '{{ nope }}');
+  refused(task('ansible.builtin.debug: msg="{{ app | upper }}"'), '{{ app | upper }}');
+  refused(task('ansible.builtin.debug: msg="{{ nested }}"'), '{{ nested }}');
+  refused(task('ansible.builtin.file: path=/tmp/{{ nope }} state=directory'), '/tmp/{{ nope }}');
+  refused(task('ansible.builtin.ping:\n      notify: "{{ nope }}"'), '{{ nope }}');
+  refused(task('ansible.builtin.debug: msg="{% if app %}x{% endif %}"'), '{% if app %}x{% endif %}');
+  refused('- name: "P {{ inventory_hostname }}"\n  hosts: web\n  tasks:\n    - ansible.builtin.ping:\n', 'P {{ inventory_hostname }}');
+  refused('- hosts: web\n  tasks:\n    - ansible.builtin.ping:\n  handlers:\n    - name: "Restart {{ svc }}"\n      ansible.builtin.ping:\n', 'Restart {{ svc }}');
+});
+
+test('debug var= of a variable the playbook does not set, or a reserved variable name: a hint', () => {
+  assert.deepEqual(parse(pb('', '').replace('ansible.builtin.ping:', 'ansible.builtin.debug: var=nope')),
+    { error: '', hint: "This course doesn't simulate `debug: var=nope` yet: it shows only a variable the play or task sets, with no template in it." });
+  assert.ok(Array.isArray(parse(pb('  vars: {d: {a: 1}}\n').replace('ansible.builtin.ping:', 'ansible.builtin.debug: var=d')).plays));
+  for (const src of [pb('  vars: {port: 1}\n'), pb('', '      vars: {name: 1}\n'), pb('', '      register: tags\n')]) {
+    assert.match(parse(src).hint, /^Ansible reserves the name `(port|name|tags)`/, src);
+  }
+});
+
+test('a duplicate key in a playbook: a hint (Ansible warns and keeps the last value; the course does not print that warning)', () => {
+  assert.deepEqual(parse('- hosts: web\n  tasks:\n    - ansible.builtin.ping:\n  tasks:\n    - ansible.builtin.ping:\n'),
+    { error: '', hint: 'Remove the repeated `tasks` key: YAML keeps only its last value, and this course doesn\'t simulate the warning Ansible prints about it.' });
+});
+
+test('a key YAML reads as a date: a hint, not an invented YAML error', () => {
+  assert.deepEqual(parse('- hosts: web\n  2024-01-01: x\n'), { error: '', hint: 'YAML reads `2024-01-01` as a date, not a name; quote it.' });
+});
+
+// ---- module arguments, in ansible-core's order (final review C2) -------------------------------------------------------
+const args = (line) => parse(`- hosts: web\n  tasks:\n    - ${line}\n`);
+const failure = (line) => args(line).plays[0].tasks[0].unsupported;
+
+test('arguments: mutually exclusive, then required, then choices, then unsupported (module_utils/common/arg_spec.py)', () => {
+  assert.equal(failure('ansible.builtin.file: {pathh: /tmp/x}'), 'missing required arguments: path'); // a lone typo
+  assert.equal(failure('ansible.builtin.file: {state: bogus, bogus: 1}'), 'missing required arguments: path');
+  assert.equal(failure('ansible.builtin.lineinfile: {regexp: a, search_string: b, state: bogus}'), 'parameters are mutually exclusive: regexp|search_string');
+  assert.equal(failure('ansible.builtin.dnf: {name: x, list: y, best: true, nobest: true}'), 'parameters are mutually exclusive: name|list, best|nobest');
+  assert.equal(failure('ansible.builtin.dnf: {pkg: x, list: y}'), 'parameters are mutually exclusive: name|list'); // aliases count as their option
+  assert.equal(failure('ansible.builtin.command: {chdir: /tmp}'), 'one of the following is required: _raw_params, cmd, argv');
+  assert.equal(failure('ansible.builtin.command: {cmd: x, argv: [x]}'), 'parameters are mutually exclusive: _raw_params|cmd|argv');
+  assert.equal(failure('ansible.builtin.user: {name: x, append: yes}'), 'append is True but all of the following are missing: groups');
+  assert.equal(failure('ansible.builtin.user: name=x append=yes'), 'append is True but all of the following are missing: groups');
+  assert.equal(failure('ansible.builtin.systemd_service: {state: started}'), "missing parameter(s) required by 'state': name");
+  assert.equal(failure('ansible.builtin.service: {enabled: true}'), "missing parameter(s) required by 'enabled': name");
+  // defaults count as given: systemd_service needs one of state/enabled/..., and daemon_reload defaults to false
+  for (const ok of ['ansible.builtin.systemd_service: {name: x}', 'ansible.builtin.dnf: {state: present}', 'ansible.builtin.user: {name: x, append: no}',
+    'ansible.builtin.debug:', 'ansible.builtin.command: echo hi']) assert.equal(failure(ok), undefined, ok);
+});
+
+test('choices: a value that is not a string is compared as Ansible converts it (True, None, 7)', () => {
+  assert.equal(failure('ansible.builtin.file: {path: /x, state: true}'), 'value of state must be one of: absent, directory, file, hard, link, touch, got: True');
+  assert.equal(failure('ansible.builtin.file: {path: /x, state: }'), 'value of state must be one of: absent, directory, file, hard, link, touch, got: None');
+  assert.equal(failure('ansible.builtin.file: {path: /x, state: 7}'), 'value of state must be one of: absent, directory, file, hard, link, touch, got: 7');
+  assert.equal(failure('ansible.builtin.apt: {name: x, upgrade: true}'), 'parameters are mutually exclusive: deb|package|upgrade');
+  assert.equal(failure('ansible.builtin.apt: {upgrade: true}'), undefined); // True is yes, the one true word in its choices
+});
+
+test('copy and template: the action plugin checks src, content and dest first (Action failed / raised)', () => {
+  const t = (line) => { const [task] = args(line).plays[0].tasks; return [task.unsupported, task.via]; };
+  assert.deepEqual(t('ansible.builtin.copy: {dest: /x, bogus: 1}'), ['src (or content) is required', 'action']);
+  assert.deepEqual(t('ansible.builtin.copy: {content: x}'), ['dest is required', 'action']);
+  assert.deepEqual(t('ansible.builtin.copy: {src: a, content: x, dest: /x}'), ['src and content are mutually exclusive', 'action']);
+  assert.deepEqual(t('ansible.builtin.copy: {content: x, dest: /tmp/}'), ['can not use content with a dir as dest', 'action']);
+  assert.deepEqual(t('ansible.builtin.template: {dest: /x}'), ['src and dest are required', 'raised']);
+  assert.deepEqual(t('ansible.builtin.template: {src: a, dest: /x, state: present}'), ["'state' cannot be specified on a template", 'raised']);
+  assert.deepEqual(t('ansible.builtin.debug: {msg: a, var: b}'), ['parameters are mutually exclusive: msg|var', 'debug']);
+  // the module's own check after the action plugin also reports the file's checksum, which the course cannot know
+  for (const line of ['ansible.builtin.copy: {content: x, dest: /x, bogus: 1}', 'ansible.builtin.template: {src: a, dest: /x, bogus: 1}']) {
+    assert.deepEqual(args(line), { error: '', hint: "This course doesn't simulate this copy failure yet: Ansible's message would include the file's checksum." }, line);
+  }
+});
+
+test('an option and its alias both set, or a required option left empty: a hint', () => {
+  assert.deepEqual(args('ansible.builtin.file: {path: /x, dest: /y, state: touch}'), { error: '', hint: 'Set path or its alias dest, not both.' });
+  assert.deepEqual(args('ansible.builtin.file: {path: , state: touch}'), { error: '', hint: "This course doesn't simulate an empty `path` yet." });
 });
 
 test('unsupported parameter: handlers and pre_tasks carry it too', () => {
@@ -121,7 +237,7 @@ test('short names expand to FQCN; k=v strings become args; args keyword merges u
     '  tasks:',
     '    - dnf:',
     '        name: nginx',
-    '      when: ansible_os_family == "RedHat"',
+    '      become_user: root',
     '      register: out',
     '    - copy: src=a dest=b',
     '    - ping:',
@@ -137,7 +253,7 @@ test('short names expand to FQCN; k=v strings become args; args keyword merges u
   assert.equal(play.gather_facts, false);
   assert.deepEqual(play.handlers, []);
   assert.deepEqual(play.tasks, [
-    { module: 'ansible.builtin.dnf', action: 'dnf', line: 5, col: 7, args: { name: 'nginx' }, keywords: { when: 'ansible_os_family == "RedHat"', register: 'out' } },
+    { module: 'ansible.builtin.dnf', action: 'dnf', line: 5, col: 7, args: { name: 'nginx' }, keywords: { become_user: 'root', register: 'out' } },
     { module: 'ansible.builtin.copy', action: 'copy', line: 9, col: 7, args: { src: 'a', dest: 'b' }, keywords: {} },
     { module: 'ansible.builtin.ping', action: 'ping', line: 10, col: 7, args: {}, keywords: {} },
     { module: 'ansible.builtin.service', action: 'service', line: 11, col: 7, args: { state: 'started', name: 'nginx' }, keywords: { args: { state: 'started', name: 'ignored' } } },

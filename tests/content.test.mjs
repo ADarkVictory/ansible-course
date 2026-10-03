@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import * as yaml from '../vendor/js-yaml.mjs';
-import { checkChoice, checkCommand, checkWrite } from '../checker.js';
+import { checkCommand, checkWrite } from '../checker.js';
 
 const root = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, root), 'utf8');
@@ -144,7 +144,6 @@ test('every choice has exactly one correct option and every option explains why'
     assert.equal(e.options.filter((o) => o.correct === true).length, 1, `${e.id}: needs exactly one correct option`);
     e.options.forEach((o, i) => {
       assert.ok(nonEmpty(o.text) && nonEmpty(o.why), `${e.id}: option ${i + 1} needs text and why`);
-      assert.equal(checkChoice(e, i).ok, o.correct === true);
     });
   }
 });

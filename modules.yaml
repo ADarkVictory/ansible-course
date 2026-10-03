@@ -8,6 +8,7 @@ ansible.builtin.ping:
     short: ping
     fqcn: ansible.builtin.ping
   choices: {}
+  required: []
 ansible.builtin.command:
   params:
   - argv
@@ -26,6 +27,15 @@ ansible.builtin.command:
     short: ansible.legacy.command
     fqcn: ansible.legacy.command
   choices: {}
+  required: []
+  mutually_exclusive:
+  - - _raw_params
+    - cmd
+    - argv
+  required_one_of:
+  - - _raw_params
+    - cmd
+    - argv
 ansible.builtin.shell:
   params:
   - chdir
@@ -42,6 +52,15 @@ ansible.builtin.shell:
     short: ansible.legacy.command
     fqcn: ansible.legacy.command
   choices: {}
+  required: []
+  mutually_exclusive:
+  - - _raw_params
+    - cmd
+    - argv
+  required_one_of:
+  - - _raw_params
+    - cmd
+    - argv
 ansible.builtin.copy:
   params:
   - attributes
@@ -73,6 +92,8 @@ ansible.builtin.copy:
     short: ansible.legacy.copy
     fqcn: ansible.legacy.copy
   choices: {}
+  required:
+  - dest
 ansible.builtin.file:
   params:
   - access_time
@@ -111,6 +132,8 @@ ansible.builtin.file:
     - hard
     - link
     - touch
+  required:
+  - path
 ansible.builtin.user:
   params:
   - append
@@ -168,6 +191,14 @@ ansible.builtin.user:
     update_password:
     - always
     - on_create
+  required:
+  - name
+  required_if:
+  - - append
+    - true
+    - - groups
+  defaults:
+    append: false
 ansible.builtin.group:
   params:
   - force
@@ -189,6 +220,14 @@ ansible.builtin.group:
     state:
     - absent
     - present
+  required:
+  - name
+  required_if:
+  - - non_unique
+    - true
+    - - gid
+  defaults:
+    non_unique: false
 ansible.builtin.dnf:
   params:
   - allow_downgrade
@@ -237,6 +276,19 @@ ansible.builtin.dnf:
     - latest
     - present
     - removed
+  required: []
+  mutually_exclusive:
+  - - name
+    - list
+  - - best
+    - nobest
+  required_one_of:
+  - - name
+    - list
+    - update_cache
+  defaults:
+    name: []
+    update_cache: false
 ansible.builtin.apt:
   params:
   - allow_change_held_packages
@@ -292,6 +344,20 @@ ansible.builtin.apt:
     - 'no'
     - safe
     - 'yes'
+  required: []
+  mutually_exclusive:
+  - - deb
+    - package
+    - upgrade
+  required_one_of:
+  - - autoremove
+    - deb
+    - package
+    - update_cache
+    - upgrade
+  defaults:
+    autoremove: false
+    upgrade: 'no'
 ansible.builtin.package:
   params:
   - name
@@ -312,6 +378,19 @@ ansible.builtin.package:
     - latest
     - present
     - removed
+  required: []
+  mutually_exclusive:
+  - - name
+    - list
+  - - best
+    - nobest
+  required_one_of:
+  - - name
+    - list
+    - update_cache
+  defaults:
+    name: []
+    update_cache: false
 ansible.builtin.service:
   params:
   - arguments
@@ -339,6 +418,23 @@ ansible.builtin.service:
     - restarted
     - started
     - stopped
+  required: []
+  required_one_of:
+  - - state
+    - enabled
+    - masked
+    - daemon_reload
+    - daemon_reexec
+  required_by:
+    state:
+    - name
+    enabled:
+    - name
+    masked:
+    - name
+  defaults:
+    daemon_reexec: false
+    daemon_reload: false
 ansible.builtin.systemd_service:
   params:
   - daemon_reexec
@@ -370,6 +466,23 @@ ansible.builtin.systemd_service:
     - restarted
     - started
     - stopped
+  required: []
+  required_one_of:
+  - - state
+    - enabled
+    - masked
+    - daemon_reload
+    - daemon_reexec
+  required_by:
+    state:
+    - name
+    enabled:
+    - name
+    masked:
+    - name
+  defaults:
+    daemon_reexec: false
+    daemon_reload: false
 ansible.builtin.lineinfile:
   params:
   - attributes
@@ -410,6 +523,15 @@ ansible.builtin.lineinfile:
     state:
     - absent
     - present
+  required:
+  - path
+  mutually_exclusive:
+  - - insertbefore
+    - insertafter
+  - - regexp
+    - search_string
+  - - backrefs
+    - search_string
 ansible.builtin.template:
   params:
   - attributes
@@ -445,6 +567,8 @@ ansible.builtin.template:
     short: ansible.legacy.copy
     fqcn: ansible.legacy.copy
   choices: {}
+  required:
+  - dest
 ansible.builtin.debug:
   params:
   - msg
@@ -457,6 +581,10 @@ ansible.builtin.debug:
     short: debug
     fqcn: ansible_collections.ansible.builtin.plugins.action.debug
   choices: {}
+  required: []
+  mutually_exclusive:
+  - - msg
+    - var
 ansible.builtin.setup:
   params:
   - fact_path
@@ -470,6 +598,7 @@ ansible.builtin.setup:
     short: setup
     fqcn: ansible.builtin.setup
   choices: {}
+  required: []
 known:
 - add_host
 - apt

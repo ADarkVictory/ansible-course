@@ -1,0 +1,4 @@
+- ansible.builtin.import_playbook: webservers.yml
+- hosts: web
+  tasks:
+    - ansible.builtin.ping:

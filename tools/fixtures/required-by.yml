@@ -1,0 +1,6 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Start the service
+      ansible.builtin.systemd_service:
+        state: started

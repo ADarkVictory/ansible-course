@@ -1,0 +1,19 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Start the service] *******************************************************
+[ERROR]: Task failed: Module failed: missing parameter(s) required by 'state': name
+Origin: /home/student/playbook.yml:4:7
+
+2   gather_facts: false
+3   tasks:
+4     - name: Start the service
+        ^ column 7
+
+fatal: [web1]: FAILED! => {"changed": false, "msg": "missing parameter(s) required by 'state': name"}
+fatal: [web2]: FAILED! => {"changed": false, "msg": "missing parameter(s) required by 'state': name"}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+web2                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

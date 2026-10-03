@@ -1,0 +1,8 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Set the port
+      ansible.builtin.lineinfile:
+        regexp: ^Port
+        search_string: Port 22
+        state: replaced

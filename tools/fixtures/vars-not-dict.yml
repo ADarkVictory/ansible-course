@@ -1,0 +1,5 @@
+- hosts: web
+  vars:
+    - greeting: Hello
+  tasks:
+    - ansible.builtin.ping:

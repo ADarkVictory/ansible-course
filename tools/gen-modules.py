@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Writes modules.yaml (from ansible-doc and real module runs) and keywords.yaml (from ansible-core's classes). Run: python tools/gen-modules.py, with the Python that has ansible-core 2.21.4 (.venv/bin/python locally; after tools/capture.sh made the venv)."""
-import json, operator, os, re, subprocess, sys
+"""Writes modules.yaml (from ansible-doc, ansible-core's own argument specs and real module runs) and keywords.yaml (from ansible-core's
+classes). Run: python tools/gen-modules.py, with the Python that has ansible-core 2.21.4 (.venv/bin/python locally)."""
+import importlib, json, operator, os, re, subprocess, sys
 from pathlib import Path
 import yaml
+from ansible.module_utils import basic
 from ansible.parsing.mod_args import ModuleArgsParser
-from ansible.playbook.block import Block
 from ansible.playbook.play import Play
+from ansible.plugins.action import ActionBase
+from ansible.vars.reserved import get_reserved_names
+import ansible.plugins.action.debug as debug_action
 
 MODULES = "ping command shell copy file user group dnf apt package service systemd_service lineinfile template debug setup".split()
 FREEFORM = {"command", "shell"}
@@ -37,9 +41,9 @@ def unsupported(m, name):
         sys.exit(f"gen-modules: no 'Supported parameters' message for {name}:\n{run.stdout}{run.stderr}")
     return found.groups()
 
-# Parameters with `choices` whose bad value the module itself rejects; these skip it: the action plugin acts on the value first.
-CHOICE_SKIP = {("dnf", "use_backend"): "picks the dnf backend (and fails on a host without dnf)",
-               ("package", "use_backend"): "picks the backend", ("template", "newline_sequence"): "prints its own message"}
+# Parameters with `choices` whose bad value the module itself rejects; these skip it: the action plugin acts on the value first
+# (dnf and package: use_backend picks the backend, and fails on a host without dnf; template: newline_sequence prints its own message).
+CHOICE_SKIP = {("dnf", "use_backend"), ("package", "use_backend"), ("template", "newline_sequence")}
 
 def choices(m, p, documented):
     """The module's own choices for p, in argument-spec order: the order 'value of p must be one of: ...' prints (ansible-doc may
@@ -50,6 +54,39 @@ def choices(m, p, documented):
     if not found or set(found[1].split(", ")) != {str(c) for c in documented}:
         sys.exit(f"gen-modules: no choices message for {m} {p} matching {documented}:\n{run.stdout}{run.stderr}")
     return found[1].split(", ")
+
+# The arguments each module really validates, read from ansible-core itself: what main() passes to AnsibleModule (or, for debug, what
+# its action plugin passes to validate_argument_spec), caught before anything runs. Action plugins hand the work to another module
+# (shell to command, template to copy; package and service to the RHEL-family backends dnf and systemd_service), so that module's
+# argument spec is the one that applies. The simulator reports the first failure in arg_spec.py's order: mutually_exclusive,
+# required, choices, required_one_of, required_if, required_by, then unsupported parameters; goldens show each message.
+SPEC_OF = {"shell": "command", "template": "copy", "package": "dnf", "service": "systemd_service"}
+class Caught(Exception): pass
+def catch(*_, **kwargs): raise Caught(kwargs)
+basic.AnsibleModule.__init__ = ActionBase.validate_argument_spec = catch
+basic._ANSIBLE_ARGS = b'{"ANSIBLE_MODULE_ARGS": {}}'
+
+def checks(m):
+    m = SPEC_OF.get(m, m)
+    try:
+        if m == "debug": debug_action.ActionModule.run(object.__new__(debug_action.ActionModule))
+        else: importlib.import_module("ansible.modules." + m).main()
+    except Caught as c:
+        kw = c.args[0]
+    else:
+        sys.exit(f"gen-modules: {m} built no argument spec")
+    if kw.get("required_together"):
+        sys.exit(f"gen-modules: {m} has required_together, which the simulator does not check yet")
+    spec = kw["argument_spec"]
+    lists = lambda v: [lists(x) for x in v] if isinstance(v, (list, tuple)) else v
+    out = {"required": sorted(p for p, o in spec.items() if o.get("required"))}
+    out |= {k: lists(kw[k]) for k in ("mutually_exclusive", "required_one_of", "required_if") if kw.get(k)}
+    if kw.get("required_by"): out["required_by"] = {k: lists(v) for k, v in kw["required_by"].items()}
+    # Defaults that are not None are set before required_one_of/if/by run, so a parameter with one always counts as given.
+    named = {p for g in out.get("required_one_of", []) for p in g} | {p for k, _, ps, *_ in out.get("required_if", []) for p in [k, *ps]} \
+        | {p for k, ps in out.get("required_by", {}).items() for p in [k, *ps]}
+    defaults = {p: lists(spec[p]["default"]) for p in sorted(named) if spec.get(p, {}).get("default") is not None}
+    return out | ({"defaults": defaults} if defaults else {})
 
 docs = json.loads(subprocess.check_output([doc, "--json", *("ansible.builtin." + m for m in MODULES)], text=True))
 out = {}
@@ -70,6 +107,7 @@ for m in MODULES:
     # package runs dnf, which checks the values (package documents no choices of its own).
     spec_opts = docs["ansible.builtin." + ("dnf" if m == "package" else m)]["doc"].get("options") or {}
     out[fq]["choices"] = {p: choices(m, p, o["choices"]) for p, o in spec_opts.items() if "choices" in o and (m, p) not in CHOICE_SKIP}
+    out[fq] |= checks(m)
 # package and service are action plugins that run dnf / systemd_service (reports_as, and the borrowed "supported" text), so
 # they accept those modules' aliases too: `package: pkg=nginx` is `name`. Checks compare canonical names.
 for m, backend in {"package": "dnf", "service": "systemd_service"}.items():
@@ -107,10 +145,10 @@ out["tombstones"] = tombstones
 # Keyword sets, read from the real classes (2.21.4), not from memory. Written to keywords.yaml.
 #   play:  Play fields in Base.load_data's load order (sorted by FieldAttribute priority); the task lists load in this order.
 #   task:  the keys ModuleArgsParser treats as task keywords (Task + Handler fields, local_action, static); any other key is an action candidate.
-#   block: Block fields.
+#   reserved: variable names Ansible warns about ("Found variable using reserved name").
 keywords = {
     "play": [n for n, _ in sorted(Play.fattributes.items(), key=operator.itemgetter(1))],
     "task": sorted(ModuleArgsParser({})._task_attrs),
-    "block": sorted(Block.fattributes),
+    "reserved": sorted(get_reserved_names()),
 }
 (root / "keywords.yaml").write_text(yaml.safe_dump(keywords, sort_keys=False, width=1000))

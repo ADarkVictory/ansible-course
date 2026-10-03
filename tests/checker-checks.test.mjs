@@ -119,6 +119,32 @@ test('has compares a k=v string with the boolean or number it converts to; lists
   assert.equal(check(ex, play('  tasks:', '    - service: { name: nginx, enabled: yes }', '    - user: { name: bob, uid: 1001 }')).failedCheck, 2);
 });
 
+test('has: a number equals the boolean Ansible converts it to (enabled: 1)', () => {
+  const ex = one([{ task: { module: 'service' }, has: { enabled: true } }]);
+  assert.equal(check(ex, play('  tasks:', '    - service: { name: nginx, enabled: 1 }')).ok, true);
+  assert.equal(check(ex, play('  tasks:', '    - service: { name: nginx, enabled: 0 }')).failedCheck, 1);
+});
+
+test('has: a nested mapping must hold exactly the wanted keys', () => {
+  const ex = one([{ task: { module: 'command' }, has: { environment: { A: 'b' } } }]);
+  assert.equal(check(ex, play('  tasks:', '    - command: echo', '      environment: { A: b }')).ok, true);
+  assert.equal(check(ex, play('  tasks:', '    - command: echo', '      environment: { A: b, C: d }')).failedCheck, 1);
+});
+
+test('has: mode is compared as a quoted octal string; YAML 1.1 reads an unquoted 0644 as the number 420', () => {
+  const ex = one([{ task: { module: 'file' }, has: { mode: '0644' } }]);
+  for (const m of ['"0644"', '0644', '"644"']) assert.equal(check(ex, play('  tasks:', `    - file: { path: /tmp/x, state: touch, mode: ${m} }`)).ok, true, m);
+  for (const m of ['644', '"0755"']) assert.equal(check(ex, play('  tasks:', `    - file: { path: /tmp/x, state: touch, mode: ${m} }`)).failedCheck, 1, m);
+});
+
+test('a keyword the simulator does not model (when, failed_when): the hint and no output, never a plain run that passes', () => {
+  const ex = one([{ task: { module: 'dnf' }, has: { name: 'nginx' }, hint: 'h' }]);
+  for (const k of ['when', 'failed_when']) {
+    assert.deepEqual(check(ex, play('  tasks:', '    - ansible.builtin.dnf: { name: nginx }', `      ${k}: false`)),
+      { ok: false, output: '', hint: `This course doesn't simulate \`${k}\` yet.` }, k);
+  }
+});
+
 test('has looks in keywords as well as args, on the given keys only', () => {
   const ex = one([{ task: { module: 'command' }, has: { become: true, creates: '/tmp/x' } }]);
   assert.equal(check(ex, play('  tasks:', '    - command: touch /tmp/x creates=/tmp/x', '      become: true')).ok, true);
@@ -188,7 +214,7 @@ test('curly quote in a module argument value (mapping or k=v) fails with the hin
 test('curly quote in a keyword value (task, play, vars) fails; in a name or a comment it passes', () => {
   const ex = one([{ task: { module: 'ping' } }]);
   for (const src of [
-    play('  tasks:', '    - ping:', '      when: x == “a”'),
+    play('  tasks:', '    - ping:', '      become_user: “a”'),
     play('  vars: { v: “a” }', '  tasks:', '    - ping:'),
     play('  tasks:', '    - ping:', '  handlers:', '    - debug: msg=“hi”'),
     '- hosts: web\n  gather_facts: false\n  become_user: “root”\n  tasks:\n    - ping:\n',
@@ -242,8 +268,7 @@ test('bare text on a module that takes none is rejected by Ansible before it run
   assert.deepEqual([t[0].unsupported, t[1].unsupported], [undefined, undefined]);
   assert.equal(check(one([]), play('  tasks:', '    - ansible.builtin.dnf: nginx')).ok, false);
   // a lone template is a mapping Ansible only sees at run time
-  const tpl = tasksOf(play('  tasks:', '    - ansible.builtin.dnf: "{{ pkg_args }}"'))[0];
-  assert.equal(tpl.unsupported, undefined);
+  assert.match(parsePlaybook(play('  tasks:', '    - ansible.builtin.dnf: "{{ pkg_args }}"'), registry, keywords).hint, /doesn't simulate/);
 });
 
 test('an unsupported task that never runs does not block success (handler nobody notifies)', () => {
@@ -279,6 +304,7 @@ test('k=v strings parse as ansible-core parse_kv does (plain and free-form modul
     for (const [module, want] of [['ansible.builtin.copy', kv], ['ansible.builtin.command', freeform]]) {
       const r = parsePlaybook(`- hosts: web\n  tasks:\n    - ${module}: ${JSON.stringify(s)}\n`, registry, keywords);
       if (want === null) assert.match(r.error, /^\[ERROR\]: Error loading tasks: failed at splitting arguments/, s);
+      else if (/\{\{|\{%/.test(s)) assert.match(r.hint, /doesn't simulate `[^`]*\{[{%]/, s); // templates beyond {{ name }} of a set variable
       else assert.deepEqual(r.plays[0].tasks[0].args, want, `${module}: ${s}`);
     }
   }
@@ -295,8 +321,8 @@ test('the args keyword merges under k=v, and k=v wins', () => {
 });
 
 test('parsed tasks keep line, col, action and unsupported', () => {
-  const [t] = tasksOf(play('  tasks:', '    - copy: src=a dest=b nope=1'));
-  assert.deepEqual([t.line, t.col, t.action], [4, 7, 'copy']);
+  const [t] = tasksOf(play('  tasks:', '    - file: path=a nope=1'));
+  assert.deepEqual([t.line, t.col, t.action], [4, 7, 'file']);
   assert.match(t.unsupported, /nope\./);
 });
 

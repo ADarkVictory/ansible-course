@@ -1,0 +1,1 @@
+[ERROR]: Hosts list must be a sequence or string. Please check your playbook.

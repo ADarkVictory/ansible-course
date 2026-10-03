@@ -15,6 +15,8 @@ const dump = (v) => JSON.stringify(v, (_, x) => x && typeof x === 'object' && !A
   ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a > b) - (a < b))) : x, 4);
 
 const WARN_UNMATCHED = (p) => `[WARNING]: Could not match supplied host pattern, ignoring: ${p}\n`;
+// What "Task failed: " is followed by when Ansible rejects a task's arguments (checker.js parsePlaybook `via`); the module itself: 'Module failed: '.
+const FAILED_BY = { action: 'Action failed: ', raised: '', debug: '' };
 const LOCALHOST = ['localhost', '127.0.0.1', '::1'];
 
 /**
@@ -31,8 +33,7 @@ export function resolveHosts(patterns, inventory) {
   const hostsOf = (g) => [...new Set([...(inventory[g] ?? []), ...(inventory[`${g}:children`] ?? []).flatMap(hostsOf)])];
   const names = [...new Set(Object.keys(inventory).map((k) => k.replace(/:children$/, '')))];
   const everyone = [...new Set(names.flatMap((g) => inventory[g] ?? []))];
-  const groups = { all: everyone, ungrouped: [], ...Object.fromEntries(names.map((g) => [g, hostsOf(g)])) };
-  groups.all = everyone;
+  const groups = { ungrouped: [], ...Object.fromEntries(names.map((g) => [g, hostsOf(g)])), all: everyone };
   const list = [patterns].flat().flatMap((p) => String(p).split(String(p).includes(',') ? /\s*,\s*/ : /\s*:\s*/)).map((p) => p.trim()).filter(Boolean);
   const kind = (p) => (p[0] === '!' ? 2 : p[0] === '&' ? 1 : 0);
   const plain = list.filter((p) => !kind(p));
@@ -57,31 +58,35 @@ export function resolveHosts(patterns, inventory) {
   return { hosts: [...new Set(hosts)], unmatched: [...unmatched] };
 }
 
-// ponytail: templating covers bare {{ name }} only (no filters or expressions); a lone {{ name }} keeps its type, as Ansible's does.
-function tpl(v, vars) {
+// Templating covers {{ name }} only: parsePlaybook refuses every other template. A lone {{ name }} keeps its type, as Ansible's
+// does; inside text a value prints as Python's str() (True, not true).
+export function tpl(v, vars) {
   if (typeof v !== 'string') return v;
   const whole = /^\{\{\s*(\w+)\s*\}\}$/.exec(v);
-  if (whole && whole[1] in vars) return vars[whole[1]];
-  return v.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+  if (whole && Object.hasOwn(vars, whole[1])) return vars[whole[1]];
+  return v.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, k) => (Object.hasOwn(vars, k) ? (typeof vars[k] === 'string' ? vars[k] : pyRepr(vars[k])) : m));
 }
+const text = (v, vars) => { const x = tpl(v, vars); return typeof x === 'string' || x == null ? x : pyRepr(x); };
 
-// Free-form "k=v" module args (debug: msg=hi, command: creates=/x touch /x) merged with the `args` keyword.
-function argsOf(task) {
-  if (typeof task.args !== 'string') return task.args;
-  const kv = [...task.args.matchAll(/(\w+)=("[^"]*"|'[^']*'|\S+)/g)].map(([, k, v]) => [k, v.replace(/^(["'])(.*)\1$/, '$2')]);
-  const extra = task.keywords.args;
-  return { ...Object.fromEntries(kv), ...(typeof extra === 'object' && extra) };
+/**
+ * The hosts a command (or a play: { pattern: hosts, flags: {} }) targets: its pattern's, narrowed by --limit, in pattern order.
+ * @param warn called with each name that matches nothing (the renderers print that warning once per name)
+ */
+export function targets(cmd, inventory, warn = () => {}) {
+  const pick = (p) => { const r = resolveHosts(p, inventory); r.unmatched.forEach(warn); return r.hosts; };
+  const hosts = pick(cmd.pattern);
+  if (!cmd.flags.limit) return hosts;
+  const keep = pick(cmd.flags.limit);
+  return hosts.filter((h) => keep.includes(h));
 }
 
 // First run: every module changes except the ones that never do. Second run: only what real modules change again.
+// changed_when is true or false here: parsePlaybook refuses expressions.
 function isChanged(task, a, second) {
   const cw = task.keywords.changed_when;
-  if (typeof cw === 'boolean') return cw;
-  if (/^(true|false)$/i.test(cw)) return /^true$/i.test(cw);
+  if (cw !== undefined) return cw === true || /^true$/i.test(cw);
   if (NEVER_CHANGES.has(task.module)) return false;
   if (!second) return true;
-  // ponytail: a changed_when expression (usually over a registered result) is taken to settle on ok once things are in place.
-  if (cw !== undefined) return false;
   switch (task.module) {
     case 'ansible.builtin.command': case 'ansible.builtin.shell': return !('creates' in a || 'removes' in a);
     case 'ansible.builtin.file': return a.state === 'touch';
@@ -90,11 +95,8 @@ function isChanged(task, a, second) {
   }
 }
 
-function debugResult(a, vars) {
-  if (!('var' in a)) return { msg: tpl(a.msg ?? 'Hello world!', vars) };
-  // ponytail: Ansible also prints a "[WARNING]: Encountered 1 template error." block with the var's Origin; not reproduced.
-  return { [a.var]: a.var in vars ? vars[a.var] : `<< error 1 - '${a.var}' is undefined >>` };
-}
+// parsePlaybook makes sure a debug var is set and holds no template.
+const debugResult = (a, vars) => ('var' in a ? { [a.var]: vars[a.var] } : { msg: tpl(a.msg ?? 'Hello world!', vars) });
 
 /**
  * @param plays     parsePlaybook(...).plays
@@ -102,41 +104,41 @@ function debugResult(a, vars) {
  * @param opts      { second?: run the playbook again over the first run's state, source?: the playbook text (for Origin) }
  */
 export function render(plays, inventory, { second = false, source = '' } = {}) {
-  const stats = {};
+  const stats = {}; // a host gets a recap row once a task ran on it
   const warned = new Set(); // Display.warning prints a given message once per run
   let out = '';
+  const warn = (p) => { if (!warned.has(p)) { warned.add(p); out += WARN_UNMATCHED(p); } };
 
   run: for (const play of plays) {
-    const { hosts, unmatched } = resolveHosts([play.hosts].flat(), inventory);
-    for (const p of unmatched) if (!warned.has(p)) { warned.add(p); out += WARN_UNMATCHED(p); }
-    out += banner(`PLAY [${play.name || [play.hosts].flat().join(',')}]`);
+    const hosts = targets({ pattern: play.hosts, flags: {} }, inventory, warn);
+    out += banner(`PLAY [${text(play.name, play.vars ?? {}) || [play.hosts].flat().join(',')}]`);
     if (!hosts.length) {
       out += 'skipping: no hosts matched\n';
       continue;
     }
-    for (const h of hosts) stats[h] ??= {};
     const varsFor = (h, task) => ({ ...play.vars, ...task.keywords.vars, inventory_hostname: h });
     const notified = new Set();
 
     // Prints one task (or handler) on every host; returns 'failed' or 'error' when the run stops there.
     const exec = (task, kind) => {
       const label = (h) => (task.keywords.delegate_to ? `${h} -> ${task.keywords.delegate_to}` : h);
-      out += banner(`${kind} [${tpl(task.name, varsFor(hosts[0], task)) || task.action}]`);
-      // Golden: unsupported-param, raw-params. The [ERROR] block shows once, then a fatal line per host.
+      out += banner(`${kind} [${text(task.name, varsFor(hosts[0], task)) || task.action}]`);
+      // Golden: unsupported-param, raw-params, missing-required, copy-no-src, template-no-src, debug-msg-var. The [ERROR] block
+      // shows once, then a fatal line per host; debug's own argument check reports no "changed".
       const raw = task.rawParams && `Action '${task.module}' does not support raw params.`;
       if (task.unsupported || raw) {
         const msg = raw ? `Task failed: ${raw}` : task.unsupported;
         out += raw
           // Ansible wraps this one (raised while preparing the task) as "Task failed." caused by the error at the action key.
           ? format(msg, `\nTask failed.\n${excerpt(source, task.line, task.col)}\n\n<<< caused by >>>\n\n${raw}\n${excerpt(source, task.rawParams.line, task.rawParams.col)}`)
-          : format(`Task failed: Module failed: ${msg}`, excerpt(source, task.line, task.col));
+          : format(`Task failed: ${FAILED_BY[task.via] ?? 'Module failed: '}${msg}`, excerpt(source, task.line, task.col));
         for (const h of hosts) {
-          out += `fatal: [${label(h)}]: FAILED! => {"changed": false, "msg": ${JSON.stringify(msg)}}\n`;
-          stats[h].failed = 1;
+          out += `fatal: [${label(h)}]: FAILED! => {${task.via === 'debug' ? '' : '"changed": false, '}"msg": ${JSON.stringify(msg)}}\n`;
+          (stats[h] ??= {}).failed = 1;
         }
         return 'failed';
       }
-      const a = argsOf(task);
+      const a = task.args;
       const changed = isChanged(task, a, second);
       if (changed) {
         for (const n of [task.keywords.notify ?? []].flat()) {
@@ -149,6 +151,7 @@ export function render(plays, inventory, { second = false, source = '' } = {}) {
         }
       }
       for (const h of hosts) {
+        stats[h] ??= {};
         stats[h].ok = (stats[h].ok ?? 0) + 1;
         if (changed) stats[h].changed = (stats[h].changed ?? 0) + 1;
         const result = task.module === 'ansible.builtin.debug' ? ` => ${dump(debugResult(a, varsFor(h, task)))}` : '';
@@ -192,17 +195,8 @@ export function render(plays, inventory, { second = false, source = '' } = {}) {
 export function renderAdhoc(cmd, inventory, { stdout = '' } = {}) {
   let out = '';
   const warned = new Set();
-  const resolve = (pattern) => {
-    const r = resolveHosts(pattern, inventory);
-    for (const p of r.unmatched) if (!warned.has(p)) { warned.add(p); out += WARN_UNMATCHED(p); }
-    return r.hosts;
-  };
-  let hosts = resolve(cmd.pattern);
-  if (cmd.flags.limit) {
-    const keep = resolve(cmd.flags.limit);
-    hosts = hosts.filter((h) => keep.includes(h));
-    if (!hosts.length) return `${out}[ERROR]: Specified inventory, host pattern and/or --limit leaves us with no hosts to target.\n`;
-  }
+  const hosts = targets(cmd, inventory, (p) => { if (!warned.has(p)) { warned.add(p); out += WARN_UNMATCHED(p); } });
+  if (cmd.flags.limit && !hosts.length) return `${out}[ERROR]: Specified inventory, host pattern and/or --limit leaves us with no hosts to target.\n`;
   if (!hosts.length) out += '[WARNING]: No hosts matched, nothing to do\n';
   if (cmd.flags['list-hosts']) return `${out}  hosts (${hosts.length}):\n${hosts.map((h) => `    ${h}\n`).join('')}`;
   if (cmd.noArg) { // adhoc.py: a pattern ending in .yml is probably a playbook
@@ -226,8 +220,10 @@ export function renderAdhoc(cmd, inventory, { stdout = '' } = {}) {
     return `${out}[ERROR]: Task failed: ${why}\n\nTask failed.\nOrigin: <adhoc '${mod}' task>\n\n${task}\n\n<<< caused by >>>\n\n${why}\n`
       + `Origin: <CLI option '-m'>\n\n${mod}\n\n${fatal(`Task failed: ${why}`)}`;
   }
-  // Golden: adhoc-unsupported-param (short and FQCN spelling).
-  if (cmd.unsupported) return `${out}[ERROR]: Task failed: Module failed: ${cmd.unsupported}\nOrigin: <adhoc '${mod}' task>\n\n${task}\n\n${fatal(cmd.unsupported)}`;
+  // Golden: adhoc-unsupported-param (short and FQCN spelling), adhoc-missing-required, adhoc-copy-no-src, adhoc-template-no-src.
+  if (cmd.unsupported) {
+    return `${out}[ERROR]: Task failed: ${FAILED_BY[cmd.via] ?? 'Module failed: '}${cmd.unsupported}\nOrigin: <adhoc '${mod}' task>\n\n${task}\n\n${fatal(cmd.unsupported)}`;
+  }
   switch (cmd.module) {
     case 'ansible.builtin.ping': return out + each((h) => `${h} | SUCCESS => ${dump({ changed: false, ping: String(cmd.args.data ?? 'pong') })}\n`);
     case 'ansible.builtin.command': case 'ansible.builtin.shell': return out + each((h) => `${h} | CHANGED | rc=0 >>\n${stdout.replace(/\n+$/, '')}\n`);

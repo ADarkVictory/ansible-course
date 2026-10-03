@@ -1,0 +1,6 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Deploy the config
+      ansible.builtin.template:
+        dest: /tmp/app.conf

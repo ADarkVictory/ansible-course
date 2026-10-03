@@ -1,0 +1,8 @@
+- hosts: web
+  gather_facts: false
+  tasks:
+    - name: Deploy the config
+      ansible.builtin.template:
+        src: app.conf.j2
+        dest: /tmp/app.conf
+        state: present

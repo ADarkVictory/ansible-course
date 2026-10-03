@@ -53,7 +53,7 @@ test('groups are found at any depth under all; hosts and children compare as set
 });
 
 test('all and ungrouped can be checked like any group', () => {
-  assert.equal(check([{ group: 'ungrouped', hosts: ['bastion1'], hint: 'h' }, { group: 'all', children: ['ungrouped', 'prod'], hint: 'h' }], lesson).ok, true);
+  assert.equal(check([{ group: 'ungrouped', hosts: ['bastion1'], hint: 'h' }, { group: 'all', hosts: ['bastion1'], children: ['ungrouped', 'prod'], hint: 'h' }], lesson).ok, true);
 });
 
 test('hosts must match exactly: a missing or an extra host fails that check, with the real graph as output', () => {
@@ -66,8 +66,16 @@ test('hosts must match exactly: a missing or an extra host fails that check, wit
 test('children must match exactly; hosts are direct members only', () => {
   assert.equal(check([{ group: 'prod', children: ['web'], hint: 'h' }], lesson).failedCheck, 1);
   assert.equal(check([{ group: 'prod', hosts: ['web1', 'web2', 'db1'], hint: 'h' }], lesson).failedCheck, 1);
-  assert.equal(check([{ group: 'prod', hosts: [], hint: 'h' }], lesson).ok, true);
-  assert.equal(check([{ group: 'prod', hint: 'h' }], lesson).ok, true);
+  assert.equal(check([{ group: 'prod', hosts: [], children: ['web', 'db'], hint: 'h' }], lesson).ok, true);
+});
+
+test('a check without hosts or children means the group has none: an extra host or a nested group fails it', () => {
+  assert.equal(check([{ group: 'prod', hint: 'h' }], lesson).failedCheck, 1); // prod holds web and db
+  assert.equal(check([{ group: 'prod', children: ['web', 'db'], hint: 'h' }], lesson).ok, true);
+  const nested = 'all:\n  children:\n    app:\n      hosts:\n        app1:\n      children:\n        cache:\n          hosts:\n            redis1:\n';
+  assert.equal(check([{ group: 'app', hosts: ['app1'], hint: 'h' }], nested).failedCheck, 1);
+  const own = 'all:\n  children:\n    frontend:\n      hosts:\n        lb1:\n      children:\n        lb:\n          hosts:\n            lb1:\n';
+  assert.equal(check([{ group: 'frontend', children: ['lb'], hint: 'h' }], own).failedCheck, 1);
 });
 
 test('a missing group fails its check', () => {
@@ -116,10 +124,6 @@ test('curly quotes in a name: the curly hint, not the check hint', () => {
   assert.equal(check([{ group: 'web', hosts: ['web1'], hint: 'h' }], '# “my” hosts\nweb:\n  hosts:\n    web1:\n').ok, true);
 });
 
-test('an unknown check key is an authoring error', () => {
-  assert.throws(() => check([{ group: 'web', host: ['web1'], hint: 'h' }], lesson), /unknown check key host/);
-});
-
 test('Run again shows the same output (an inventory has no second run)', () => {
   const ex = { id: 'x', type: 'write', kind: 'inventory', checks: groupChecks };
   assert.deepEqual(checkWrite(ex, lesson, registry, keywords, { second: true }), checkWrite(ex, lesson, registry, keywords));
@@ -136,6 +140,7 @@ test('what the engine cannot render faithfully gives no output and says so', () 
     ['{}\n', /INI/],
     ['web1\n', /INI/],
     ['web:\n  hosts:\n    "":\n', /empty/],
+    ['web:\n  hosts:\n    web1: 2024-01-01\n', /dates/],
   ]) {
     const r = parseInventory(src);
     assert.equal(r.output, '', src);

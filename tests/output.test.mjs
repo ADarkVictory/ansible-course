@@ -32,6 +32,26 @@ for (const [name, n, opts] of [
   ['missing-handler: notify naming no handler stops the run with the real [ERROR]', 'missing-handler', {}],
   ['run-idempotency: unnamed tasks, creates (both forms), changed_when, pre_tasks flush, debug msg/var', 'run-idempotency', {}],
   ['run-idempotency: second run (creates/changed_when ok; still-changed command fires its handler)', 'run-idempotency', { second: true }],
+  ['run-intro: the playbook lesson 1 shows', 'run-intro', {}],
+  ['run-intro: second run', 'run-intro', { second: true }],
+  ['run-no-tasks: a host that runs no task has no recap row', 'run-no-tasks', {}],
+  ['run-templates: {{ name }} of play and task variables in names and debug, with Python\'s True', 'run-templates', {}],
+  ['invalid-choice-template: a {{ }} value is checked once the play variable is filled in', 'invalid-choice-template', {}],
+  ['invalid-choice-bool: a boolean is converted to True before the choices check', 'invalid-choice-bool', {}],
+  ['invalid-choice-null: an empty value is None', 'invalid-choice-null', {}],
+  ['missing-required: a lone typo leaves path missing; required comes before choices and unsupported', 'missing-required', {}],
+  ['mutually-exclusive: comes before required and choices', 'mutually-exclusive', {}],
+  ['required-one-of: command with no command', 'required-one-of', {}],
+  ['required-if: append needs groups', 'required-if', {}],
+  ['required-by: state needs name', 'required-by', {}],
+  ['copy-no-src: the copy action plugin fails first ("Action failed:")', 'copy-no-src', {}],
+  ['copy-no-dest', 'copy-no-dest', {}],
+  ['copy-src-content', 'copy-src-content', {}],
+  ['copy-content-dir-dest', 'copy-content-dir-dest', {}],
+  ['template-no-src: the template action plugin raises (no "Action failed:")', 'template-no-src', {}],
+  ['template-state', 'template-state', {}],
+  ['debug-msg-var: debug\'s action plugin checks its arguments (no "changed" in the result)', 'debug-msg-var', {}],
+  ['debug-unsupported', 'debug-unsupported', {}],
 ]) {
   test(name, () => assert.equal(run(fixture(n), opts), golden(opts.second ? `${n}-second` : n)));
 }
@@ -113,23 +133,8 @@ test('hosts: localhost is the implicit localhost; a partly matched list warns an
 });
 
 // Host patterns over tools/fixtures/inventory-multi.ini, checked against real `ansible <pattern> --list-hosts` (tests/golden/list-hosts.json).
+// (checker-command.test.mjs replays every real --list-hosts pattern through resolveHosts.)
 const multi = { web: ['web1', 'web2'], db: ['db1'], prod: ['web1', 'db1'], staging: ['web2'] };
-const WARN = (p) => `[WARNING]: Could not match supplied host pattern, ignoring: ${p}\n`;
-// What --list-hosts prints for a resolveHosts result.
-const listed = ({ hosts, unmatched }) => unmatched.map(WARN).join('')
-  + (hosts.length ? '' : '[WARNING]: No hosts matched, nothing to do\n')
-  + `  hosts (${hosts.length}):\n${hosts.map((h) => `    ${h}\n`).join('')}`;
-
-test('resolveHosts: web:&prod, web:!db, web1:web2 as real ansible lists them', () => {
-  assert.deepEqual(resolveHosts('web:&prod', multi).hosts, ['web1']);
-  assert.deepEqual(resolveHosts('web:!db', multi).hosts, ['web1', 'web2']);
-  assert.deepEqual(resolveHosts('web1:web2', multi).hosts, ['web1', 'web2']);
-  assert.deepEqual(resolveHosts('web2:web1', multi).hosts, ['web2', 'web1']);
-});
-
-for (const { pattern, output } of JSON.parse(read('./golden/list-hosts.json'))) {
-  test(`resolveHosts matches real --list-hosts: ${pattern}`, () => assert.equal(listed(resolveHosts(pattern, multi)), output));
-}
 
 test('resolveHosts: an array of patterns is split element by element (a play with hosts: [web, db:!db1])', () => {
   assert.deepEqual(resolveHosts(['web', 'db:!db1'], multi), { hosts: ['web1', 'web2'], unmatched: [] });
@@ -141,13 +146,9 @@ test('render: hosts patterns (intersection, exclusion, comma form) and one warni
   assert.equal(render(plays, multi, { source: fixture('hosts-patterns') }), golden('run-hosts-patterns'));
 });
 
-test('choices: a {{ }} value is unknown until run time and not checked; only strings are checked', () => {
+test('choices: a value with inventory_hostname differs per host, so it is not checked', () => {
   const task = (state) => `- hosts: web\n  gather_facts: false\n  tasks:\n    - ansible.builtin.file:\n        path: /tmp/x\n        state: ${state}\n`;
-  for (const v of ['"{{ wanted }}"', 'directory', 'Directory']) {
-    const ok = !v.startsWith('D');
-    assert.equal(/\[ERROR\]/.test(run(task(v))), !ok, v);
-  }
-  assert.doesNotMatch(run(task('7')), /\[ERROR\]/); // ponytail ceiling: a number is converted to a string by Ansible first (not simulated)
+  for (const [v, bad] of [['"{{ inventory_hostname }}"', false], ['directory', false], ['Directory', true]]) assert.equal(/\[ERROR\]/.test(run(task(v))), bad, v);
 });
 
 test('choices: "True"/"False" match a choice that is the one boolean word among them (module_utils/common/parameters.py)', () => {

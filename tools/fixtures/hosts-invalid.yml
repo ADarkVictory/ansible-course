@@ -1,0 +1,3 @@
+- hosts: [web, 5]
+  tasks:
+    - ansible.builtin.ping:

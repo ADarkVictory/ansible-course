@@ -1,0 +1,13 @@
+[ERROR]: Task failed: src and dest are required
+Origin: <adhoc 'template' task>
+
+{'action': 'template', 'args': {'dest': '/tmp/app.conf'}, 'timeout': 0, 'async_val': 0, 'poll': 15}
+
+web1 | FAILED! => {
+    "changed": false,
+    "msg": "src and dest are required"
+}
+web2 | FAILED! => {
+    "changed": false,
+    "msg": "src and dest are required"
+}

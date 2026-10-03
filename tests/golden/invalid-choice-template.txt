@@ -1,0 +1,19 @@
+
+PLAY [web] *********************************************************************
+
+TASK [Create a directory] ******************************************************
+[ERROR]: Task failed: Module failed: value of state must be one of: absent, directory, file, hard, link, touch, got: Directory
+Origin: /home/student/playbook.yml:6:7
+
+4     wanted: Directory
+5   tasks:
+6     - name: Create a directory
+        ^ column 7
+
+fatal: [web1]: FAILED! => {"changed": false, "msg": "value of state must be one of: absent, directory, file, hard, link, touch, got: Directory"}
+fatal: [web2]: FAILED! => {"changed": false, "msg": "value of state must be one of: absent, directory, file, hard, link, touch, got: Directory"}
+
+PLAY RECAP *********************************************************************
+web1                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+web2                       : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

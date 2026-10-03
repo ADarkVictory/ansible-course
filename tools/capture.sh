@@ -14,19 +14,18 @@
 #   ansible-doc <args>                                                            (doc-*, see the doc calls below)
 # ANSIBLE_FORKS=1 keeps host order deterministic (web1 before web2); default forks=5 races.
 # <name>-second is <name>.yml run a second time with no cleanup in between.
-# Needs: ansible-core 2.21.4 (the .venv, an active environment, or uv + python3.13 to make the .venv) and a writable /home/student (CI: sudo mkdir -p /home/student && sudo chown $USER /home/student).
+# Needs: ansible-core 2.21.4 (the .venv or an active environment) and a writable /home/student (CI: sudo mkdir -p /home/student && sudo chown $USER /home/student).
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
 mkdir -p /home/student 2>/dev/null
 [ -w /home/student ] || { echo "capture.sh: /home/student must exist and be writable (sudo mkdir -p /home/student && sudo chown \$USER /home/student)" >&2; exit 1; }
 
-# Which Python environment: the repo's .venv, else the already-active one (CI: setup-python + pip install ansible-core==2.21.4), else make .venv with uv.
+# Which Python environment: the repo's .venv, else the already-active one (CI: setup-python + pip install ansible-core==2.21.4).
 if [ -x "$root/.venv/bin/ansible" ]; then bin="$root/.venv/bin"
 elif command -v ansible >/dev/null; then bin=$(dirname "$(command -v ansible)")
-else
-  uv venv -p 3.13 "$root/.venv" && uv pip install -p "$root/.venv/bin/python" ansible-core==2.21.4 || exit 1
-  bin="$root/.venv/bin"
+else echo "capture.sh: no ansible found; make .venv as the README says" >&2; exit 1
 fi
+"$bin/ansible" --version < /dev/null 2>&1 | grep -q 'core 2\.21\.4\]' || { echo "capture.sh: needs ansible-core 2.21.4" >&2; exit 1; }
 
 # PYTHONUNBUFFERED: Ansible writes stdout and stderr with no flush of its own, so into one file the order of [WARNING] lines against
 # stdout depends on buffering (it differed between machines). Unbuffered, the file holds them in emission order.
@@ -38,7 +37,10 @@ cd /home/student || exit 1
 
 for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param unknown-play-keyword task-keyword-typo \
          yaml-colon yaml-unclosed-quote yaml-dedent yaml-mapping-values no-action task-not-a-dict hosts-missing args-unbalanced-quote raw-params missing-handler tombstone-include tombstone-module yum-unsupported \
-         invalid-choice invalid-choice-unsupported \
+         invalid-choice invalid-choice-unsupported invalid-choice-bool invalid-choice-null missing-required mutually-exclusive \
+         required-one-of required-if required-by copy-no-src copy-no-dest copy-src-content copy-content-dir-dest template-no-src \
+         template-state debug-msg-var debug-unsupported hosts-empty hosts-none hosts-invalid hosts-not-list vars-not-dict \
+         task-vars-not-dict action-local-action import-playbook run-no-tasks run-templates invalid-choice-template \
          run-sample run-sample-second run-no-facts run-idempotency run-idempotency-second run-intro run-intro-second adhoc-ping; do
   src=${f%-second}
   [ "$src" != "$f" ] || rm -rf /tmp/web1 /tmp/web2 /tmp/app   # fresh hosts; the second run must see the first run's state
@@ -73,6 +75,9 @@ adhoc adhoc-module-tombstone web -m bigip_facts
 adhoc adhoc-yum-unsupported web -m yum -a 'name=x use_backend=dnf4 bogus=1'
 adhoc adhoc-unsupported-param-redirect web -m systemd -a 'name=x bogus=1'
 adhoc adhoc-invalid-choice web -m dnf -a 'name=x use_backend=dnf4 state=install'
+adhoc adhoc-missing-required web -m file
+adhoc adhoc-copy-no-src web -m copy -a dest=/tmp/app.conf
+adhoc adhoc-template-no-src web -m template -a dest=/tmp/app.conf
 adhoc adhoc-limit 'web:db' -m ping --limit prod
 adhoc adhoc-limit-empty web -m ping --limit db
 adhoc adhoc-limit-unmatched nosuch -m ping --limit nosuch

@@ -3,7 +3,7 @@
 // our own Markdown (lessons, and exercise task/question/option/why text from the .ex.yaml files).
 import * as yaml from './vendor/js-yaml.mjs';
 import { marked } from './vendor/marked.esm.js';
-import { checkWrite, checkCommand, checkChoice } from './checker.js';
+import { checkWrite, checkCommand } from './checker.js';
 import { parseRoute, applyKey, loadProgress, saveProgress, isBanner } from './ui.js';
 
 const $ = (id) => document.getElementById(id);
@@ -152,14 +152,14 @@ function exercise(ex, onDone) {
 function choice(ex, box, markDone) {
   box.append(markdown(ex.question));
   if (ex.code) box.append(h('pre', {}, h('code', { textContent: ex.code })));
-  box.append(h('div', { className: 'options' }, ...ex.options.map((o, i) => {
+  box.append(h('div', { className: 'options' }, ...ex.options.map((o) => {
     const why = h('p', { className: 'why', 'aria-live': 'polite' });
     const btn = h('button', { type: 'button', className: 'option' }, markdown(o.text, true));
     btn.onclick = () => {
-      const r = checkChoice(ex, i);
-      btn.classList.add(r.ok ? 'right' : 'wrong');
-      why.replaceChildren(h('strong', {}, r.ok ? 'Correct. ' : 'Not quite. '), markdown(o.why, true));
-      if (r.ok) markDone();
+      const ok = o.correct === true;
+      btn.classList.add(ok ? 'right' : 'wrong');
+      why.replaceChildren(h('strong', {}, ok ? 'Correct. ' : 'Not quite. '), markdown(o.why, true));
+      if (ok) markDone();
     };
     return h('div', { className: 'opt' }, btn, why);
   })));

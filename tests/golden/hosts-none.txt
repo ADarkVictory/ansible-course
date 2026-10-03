@@ -1,0 +1,1 @@
+[ERROR]: Hosts list cannot contain values of 'None'. Please check your playbook

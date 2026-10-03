@@ -1,0 +1,8 @@
+[ERROR]: Vars in a Task must be specified as a dictionary.
+Origin: /home/student/playbook.yml:7:9
+
+5         msg: Hello
+6       vars:
+7         - greeting: Hello
+          ^ column 9
+

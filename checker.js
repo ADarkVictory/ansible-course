@@ -1,7 +1,7 @@
 // Pure ES module, no DOM: the browser and Node run the same code.
 // parsePlaybook turns playbook text into plays, or into the exact error ansible-core 2.21.4 prints for it.
 import * as yaml from './vendor/js-yaml.mjs';
-import { render, renderAdhoc, renderGraph, resolveHosts } from './output.js'; // output.js imports format/excerpt back; both only call each other at run time, so the cycle is harmless.
+import { render, renderAdhoc, renderGraph, targets, tpl } from './output.js'; // output.js imports format/excerpt back; both only call each other at run time, so the cycle is harmless.
 
 const PATH = '/home/student/playbook.yml';
 const INV = '/home/student/inventory.yml';
@@ -9,6 +9,14 @@ const TAB_HINT = 'Replace tabs with spaces.';
 const CURLY_HINT = 'Your keyboard inserted curly quotes; use straight quotes.';
 const DASH_HINT = 'Your keyboard turned -- into a dash; type two hyphens.';
 const TASK_LISTS = new Set(['handlers', 'pre_tasks', 'post_tasks', 'tasks']);
+// Keywords the simulator acts on, plus those that cannot change what the default callback prints for these hosts (each checked
+// against a real run). Any other real keyword gets a course hint instead of a run; later modules move keywords in here as they
+// model them, with goldens.
+const PLAY_KEYS = new Set([...TASK_LISTS, 'name', 'hosts', 'gather_facts', 'vars', 'become', 'become_user', 'remote_user', 'connection',
+  'port', 'tags', 'environment', 'timeout', 'throttle', 'any_errors_fatal']);
+const TASK_KEYS = new Set(['name', 'action', 'local_action', 'args', 'notify', 'listen', 'changed_when', 'vars', 'delegate_to', 'register',
+  'become', 'become_user', 'remote_user', 'connection', 'port', 'tags', 'environment', 'timeout', 'throttle']);
+const notYet = (what) => `This course doesn't simulate \`${what}\` yet.`;
 // YAML 1.1 as PyYAML (and so Ansible) resolves it: js-yaml's YAML 1.1 also reads y/n as booleans and 0-led "05:30" as base-60 ints.
 const SCHEMA = yaml.YAML11_SCHEMA.withTags(
   { ...yaml.boolYaml11Tag, resolve: (s) => /^[yYnN]$/.test(s) ? yaml.NOT_RESOLVED : yaml.boolYaml11Tag.resolve(s) },
@@ -18,18 +26,19 @@ const SCHEMA = yaml.YAML11_SCHEMA.withTags(
 /**
  * @param source   playbook text
  * @param registry parsed modules.yaml
- * @param keywords parsed keywords.yaml ({ play, task, block } from ansible-core)
- * @returns { plays, hint? } | { error, hint? }
+ * @param keywords parsed keywords.yaml ({ play, task, reserved } from ansible-core)
+ * @returns { plays, hint? } | { error, hint? }; error '' with a hint: what the course does not simulate (no Ansible text to show).
  *   Every task's args are a mapping: k=v strings are parsed as Ansible does (free-form modules keep the bare text as `_raw_params`),
  *   the `args` keyword is merged in, and aliases are renamed to the canonical parameter.
- *   A task (in any list) whose arguments the module would reject at run time (a value outside its choices, an unknown parameter)
- *   carries `unsupported: <exact msg>`; the renderer raises it when the task (or notified handler) runs.
+ *   A task (in any list) whose arguments Ansible would reject at run time carries `unsupported: <exact msg>` and, unless the module
+ *   itself rejects them, `via`: 'action' (copy's action plugin), 'raised' (template's) or 'debug' (debug's argument check); the
+ *   renderer raises it when the task (or notified handler) runs.
  *   A hint next to plays (curly quotes) means the checker must still fail: real Ansible would run the wrong value.
  */
 export function parsePlaybook(source, registry, keywords) {
   const src = String(source).replace(/\r\n?/g, '\n');
   const out = parse(src, registry, keywords);
-  if (!out.hint && /[“”‘’]/.test(src)) out.hint = CURLY_HINT;
+  if (!out.hint && CURLY.test(src)) out.hint = CURLY_HINT;
   return out;
 }
 
@@ -84,19 +93,21 @@ const hasCurly = (v) => typeof v === 'string' ? CURLY.test(v)
 
 // A task matches { module, name? } (short module names are ansible.builtin) and carries every key of `want` in its args or keywords.
 function matches(task, { module, name }, want) {
-  return (module === undefined || task.module === (module.includes('.') ? module : `ansible.builtin.${module}`))
+  return (module === undefined || task.module === fqcn(module))
     && (name === undefined || task.name === name)
     && has({ ...task.keywords, ...task.args }, want);
 }
 
-const has = (obj, want = {}) => Object.entries(want).every(([k, v]) => Object.hasOwn(obj, k) && same(obj[k], v));
+// mode is checked as a quoted octal string: YAML 1.1 reads an unquoted 0644 as the number 420, and Ansible reads "644" as octal.
+const octal = (v) => typeof v === 'number' ? v.toString(8).padStart(4, '0') : typeof v === 'string' && /^[0-7]{3}$/.test(v) ? `0${v}` : v;
+const has = (obj, want = {}) => Object.entries(want).every(([k, v]) => Object.hasOwn(obj, k) && same(k === 'mode' ? octal(obj[k]) : obj[k], v));
 
-// Deep equality, as lenient as Ansible: one-item lists equal their item (notify: [x] is notify: x), and a k=v string
-// ("yes", "1000") equals the boolean or number it converts to.
+// Deep equality, as lenient as Ansible: one-item lists equal their item (notify: [x] is notify: x), and a k=v string or a number
+// ("yes", 1, "1000") equals the boolean or number it converts to.
 function same(a, want) {
   const one = (v) => Array.isArray(v) && v.length === 1 ? v[0] : v;
   [a, want] = [one(a), one(want)];
-  if (typeof a === 'string' && typeof want === 'boolean') return (want ? /^(1|y|yes|on|t|true)$/i : /^(0|n|no|off|f|false)$/i).test(a);
+  if (typeof want === 'boolean' && /^(string|number)$/.test(typeof a)) return BOOL_WORDS[want ? 'True' : 'False'].includes(String(a).toLowerCase());
   if (typeof a === 'string' && typeof want === 'number') return a.trim() !== '' && Number(a) === want;
   if (Array.isArray(a) && Array.isArray(want)) return a.length === want.length && a.every((x, i) => same(x, want[i]));
   if (isMap(a) && isMap(want)) return Object.keys(a).length === Object.keys(want).length && has(a, want);
@@ -132,12 +143,14 @@ const UNSIMULATED = new Set(['verbose', 'one-line', 'check', 'diff', 'tree', 'ba
   'ask-vault-password', 'version', 'help', 'task-timeout']);
 
 // A shell line's words: whitespace separates them; quotes and backslashes only (no $, globs, pipes). undefined: a quote is left open.
-function shellWords(line) {
+// comments: a # outside quotes ends the line, even inside a word (shlex.split(line, comments=True)).
+function shellWords(line, comments = false) {
   const words = [];
   let w = null, q = null;
   for (let i = 0; i < line.length; i++) {
     const c = line[i];
     if (q === "'") { if (c === "'") q = null; else w += c; }
+    else if (comments && !q && c === '#') break;
     else if (c === '\\' && (!q || '"\\$`'.includes(line[i + 1] ?? ''))) w = (w ?? '') + (line[++i] ?? '\\');
     else if (c === q) q = null;
     else if (!q && (c === '"' || c === "'")) { q = c; w ??= ''; }
@@ -186,7 +199,7 @@ function parseArgv(argv, options, program) {
     for (let j = w.startsWith('--') ? 0 : 1; j < w.length; j++) {
       const eq = w.indexOf('=');
       const flag = j === 0 ? (eq < 0 ? w : w.slice(0, eq)) : `-${w[j]}`;
-      const prefixed = j === 0 && !options.has(flag) ? [...options.keys()].filter((k) => k.startsWith(flag) && k.startsWith('--')) : [];
+      const prefixed = j === 0 && !options.has(flag) ? [...options.keys()].filter((k) => k.startsWith(flag)) : [];
       if (prefixed.length > 1) return { error: `${flag} is ambiguous: ${prefixed.join(', ')}.` };
       const opt = options.get(prefixed[0] ?? flag);
       if (!opt) return { error: `${program} does not know the option ${flag}.` };
@@ -233,8 +246,7 @@ export function parseCommand(line, registry) {
     // ponytail: -t values and -j are not validated; checks that pass with an extra -j still show the exercise's plain-text golden.
     const modes = DOC_MODES.filter((m) => m in flags);
     if (modes.length > 1) return { program, hint: `ansible-doc does one at a time: --${modes.join(' or --')}.` };
-    const name = pos.length === 1 && (flags.type ?? 'module') === 'module'
-      ? fqcn(pos[0]).replace(/^ansible\.legacy\./, 'ansible.builtin.') : undefined;
+    const name = pos.length === 1 && (flags.type ?? 'module') === 'module' ? builtinName(pos[0]) : undefined;
     return { program, pattern: pos.join(' ') || undefined, module: name && (registry.twins?.[name] ?? name), flags };
   }
   if (!pos.length) return { program, hint: 'ansible needs a host pattern, for example: ansible web -m ping' };
@@ -249,12 +261,18 @@ export function parseCommand(line, registry) {
     typed = isMap(json) ? json : parseKv(text, spec?.freeform);
     if (!typed) return { program, hint: 'The quotes in -a do not balance: close every quote you open.' };
   }
+  const tplText = unknownTemplate(typed, {});
+  if (tplText !== undefined) return { program, hint: `This course doesn't simulate \`${tplText}\` in an ad-hoc command yet.` };
   const rawParams = Boolean(spec && '_raw_params' in typed && !spec.freeform);
+  const args = { ...typed };
+  const failure = spec && (normalise(spec, args) ?? (rawParams ? undefined : moduleFailure(module, spec, mod, args, twin)));
+  if (typeof failure === 'string') return { program, hint: failure };
+  // ad hoc, debug's argument check prints a longer "caused by" frame the course does not reproduce
+  if (failure?.via === 'debug') return { program, hint: "This course doesn't simulate this debug failure in an ad-hoc command yet." };
   return {
-    program, pattern: pos[0], module, args: spec ? normalise(spec, { ...typed }) : { ...typed }, flags: rest,
-    mod, known: real, tombstone, typedArgs: typed, rawParams,
+    program, pattern: pos[0], module, args, flags: rest, mod, known: real, tombstone, typedArgs: typed, rawParams,
     noArg: !text && (module === 'ansible.builtin.command' || module === 'ansible.builtin.shell'),
-    unsupported: spec && !rawParams ? argsError(spec, mod, typed, twin) : undefined,
+    unsupported: failure?.msg, via: failure?.via,
   };
 }
 
@@ -276,26 +294,13 @@ export function checkCommand(exercise, line, registry) {
   // A command real Ansible stops on is never correct, and a check's hint would only mislead: the learner needs that error first.
   if (/^\[ERROR\]: /m.test(shown)) return fail(shown);
   const checks = exercise.checks ?? [];
-  const canonical = (m) => m.includes('.') ? m : `ansible.builtin.${m}`;
-  // The hosts the command runs on: the pattern's, narrowed by --limit (as renderAdhoc does).
-  const targets = () => resolveHosts(cmd.pattern, exercise.inventory).hosts
-    .filter((h) => !cmd.flags.limit || resolveHosts(cmd.flags.limit, exercise.inventory).hosts.includes(h));
-  const i = checks.findIndex((c) => {
-    const bad = Object.keys(c).find((k) => !['program', 'pattern', 'hosts', 'module', 'args', 'flags', 'hint'].includes(k));
-    if (bad) throw new Error(`unknown check ${bad} in exercise ${exercise.id}: ${JSON.stringify(c)}`);
-    return !((c.program ?? cmd.program) === cmd.program && (c.pattern ?? cmd.pattern) === cmd.pattern
-      && (!c.hosts || [...c.hosts].sort().join() === targets().sort().join())
-      && (c.module === undefined || canonical(c.module) === cmd.module) && has(cmd.args ?? {}, c.args) && has(cmd.flags, c.flags));
-  });
-  // The exercise's stdout is what the expected command prints; for any other command or shell line the real output is unknown.
-  if (i >= 0) return fail(/^ansible\.builtin\.(command|shell)$/.test(cmd.module) ? '' : shown, checks[i].hint, i + 1);
+  const i = checks.findIndex((c) => !((c.program ?? cmd.program) === cmd.program && (c.pattern ?? cmd.pattern) === cmd.pattern
+      && (!c.hosts || [...c.hosts].sort().join() === targets(cmd, exercise.inventory).sort().join())
+      && (c.module === undefined || fqcn(c.module) === cmd.module) && has(cmd.args ?? {}, c.args) && has(cmd.flags, c.flags)));
+  // The exercise's stdout is what the expected command prints; for any other command or shell line the real output is unknown
+  // (--list-hosts runs no module, so its output is real).
+  if (i >= 0) return fail(/^ansible\.builtin\.(command|shell)$/.test(cmd.module) && !cmd.flags['list-hosts'] ? '' : shown, checks[i].hint, i + 1);
   return { ok: true, output: exercise.output ?? shown };
-}
-
-/** The chosen option's verdict and explanation: { ok, why }. */
-export function checkChoice(exercise, index) {
-  const option = exercise.options[index];
-  return { ok: option?.correct === true, why: option?.why ?? '' };
 }
 
 // YAML text as Ansible's loader reads it: { data, tree } or { error, hint? } (the YAML error frame naming `path`).
@@ -309,9 +314,13 @@ function load(src, path = PATH) {
     docs = yaml.constructFromEvents(events, { schema: SCHEMA, json: true, source: src });
   } catch (e) {
     if (!(e instanceof yaml.YAMLException)) throw e;
-    // A scalar key js-yaml cannot use as an object key (a date): keyAt is where it starts.
-    const keyAt = /complex keys/.test(e.reason) && tree?.complexKey === undefined ? e.mark?.position : undefined;
-    return { error: yamlError(src, e, tree, path), ...(src.includes('\t') && { hint: TAB_HINT }), ...(keyAt !== undefined && { keyAt }) };
+    // A scalar key js-yaml cannot use as an object key (a date): the course cannot follow Ansible here, so a hint and no error.
+    if (/complex keys/.test(e.reason) && tree?.complexKey === undefined && e.mark) {
+      const k = keyOf(/^[^:\n]*/.exec(src.slice(e.mark.position))[0].trim(), { plain: true });
+      if (typeof k !== 'string') return { error: '', hint: k.hint };
+    }
+    const error = yamlError(src, e, tree, path);
+    return { error, ...(/^\[ERROR\]: YAML parsing failed: Tabs are usually invalid/.test(error) && { hint: TAB_HINT }) };
   }
   if (docs.length > 1) {
     // ponytail: libyaml points at the second "---"; a second document opened without "---" falls back to line 1.
@@ -334,6 +343,7 @@ function load(src, path = PATH) {
 // ansible_group_priority values and duplicate localhost entries are not checked.
 const INVALID_GROUP_CHARS = /^\p{Nd}|[^\p{L}\p{N}_]/u; // C.INVALID_VARIABLE_NAMES, Unicode-aware as in Python
 const NOT_SIMULATED_INI = 'Ansible would read this file as an INI inventory, which this course doesn\'t simulate here. Write the inventory in YAML.';
+const NO_DATES = 'This course doesn\'t simulate dates in an inventory yet.';
 class Unsupported { constructor(hint) { this.hint = hint; } }
 class ParseFailure { constructor(msg) { this.msg = msg.trim(); } } // Ansible prints the message stripped
 // utils/vars.py validate_variable_name; an invalid name makes Ansible print a deprecation warning the course does not reproduce.
@@ -373,7 +383,7 @@ const nameOf = (k) => {
 };
 
 /**
- * @returns { output, groups, hint?, yamlError?, unsupported? }
+ * @returns { output, groups, hint?, yamlError? }
  *   output: what ansible-inventory --graph prints ('' when the course cannot reproduce it; hint then says why);
  *   groups: Map name → { hosts: [names], children: [names], parents: [names] }, the inventory Ansible ends up with;
  *   yamlError: the file is not valid YAML; hint: tabs, curly quotes, or what is not simulated.
@@ -436,7 +446,7 @@ export function parseInventory(source) {
       }
     }
     for (const [key, value, vnode] of entriesOf(data, node)) {
-      if (value instanceof Date) throw new Unsupported('This course doesn\'t simulate dates in an inventory yet.');
+      if (value instanceof Date) throw new Unsupported(NO_DATES);
       if (!(isMap(value) || value === null)) {
         warn(`Skipping key (${nameOf(key)}) in group (${name}) as it is not a mapping, it is a ${pyType(value)}`);
         continue;
@@ -454,6 +464,7 @@ export function parseInventory(source) {
           if (typeof host !== 'string') throw new ParseFailure(`Host pattern ${nameOf(host)} must be a string. Enclose integers/floats in quotation marks.`);
           if (host === '') throw new Unsupported('This course doesn\'t simulate an empty host name; give every host a name.');
           if (/[[\]:]/.test(host)) throw new Unsupported('This course doesn\'t simulate host ranges or ports in inventory host names yet.');
+          if (d instanceof Date) throw new Unsupported(NO_DATES);
           const vars = pyFalsy(d) ? {} : d;
           if (!isMap(vars)) throw new ParseFailure(`Invalid data from file, expected dictionary and got:\n\n${pyStr(vars)}`);
           if (!hosts.has(host)) hosts.set(host, new Set());
@@ -496,10 +507,7 @@ export function parseInventory(source) {
     addGroup('ungrouped');
     addChild('all', 'ungrouped');
     let auto, yamlMsg;
-    if (loaded.keyAt !== undefined) { // js-yaml cannot build a mapping with this key, so the course cannot follow Ansible here
-      const k = keyOf(/^[^:\n]*/.exec(src.slice(loaded.keyAt))[0].trim(), { plain: true });
-      if (typeof k !== 'string') throw new Unsupported(k.hint);
-    }
+    if (loaded.error === '') throw new Unsupported(loaded.hint);
     if ('error' in loaded) {
       const frame = loaded.error.slice('[ERROR]: '.length).trimEnd();
       yamlMsg = frame.split('\n')[0];
@@ -530,7 +538,7 @@ export function parseInventory(source) {
     const hint = loaded.hint ?? (curly ? CURLY_HINT : undefined);
     return { output: out + renderGraph(groups), groups, ...(hint && { hint }), ...('error' in loaded && { yamlError: true }) };
   } catch (e) {
-    if (e instanceof Unsupported) return { output: '', groups, hint: e.hint, unsupported: true };
+    if (e instanceof Unsupported) return { output: '', groups, hint: e.hint };
     throw e;
   }
 }
@@ -547,16 +555,7 @@ function iniFailure(src) {
     if (line.startsWith('[') && line.endsWith(']')) {
       return { hosts, msg: `Invalid section entry: '${line}'. Please make sure that there are no spaces in the section entry, and that there are no other invalid characters` };
     }
-    // shlex.split(line, comments=True): a # outside quotes starts a comment, even inside a word.
-    let cut = line.length;
-    for (let i = 0, q = null; i < line.length; i++) {
-      const c = line[i];
-      if (q) { if (c === q) q = null; else if (q === '"' && c === '\\') i++; }
-      else if (c === '\\') i++;
-      else if (c === '"' || c === "'") q = c;
-      else if (c === '#') { cut = i; break; }
-    }
-    const words = shellWords(line.slice(0, cut));
+    const words = shellWords(line, true);
     if (!words) return { hosts, chained: true, msg: `Error parsing host definition '${line}': No closing quotation` }; // raised while handling shlex's ValueError
     if (!words.length) throw new Unsupported(NOT_SIMULATED_INI);
     const [host, ...rest] = words;
@@ -576,7 +575,7 @@ function iniFailure(src) {
 /**
  * Decides whether a learner's inventory meets a `kind: inventory` write exercise.
  * @param exercise { checks: [{ group, hosts?, children?, hint }] } a check passes when `group` is reachable from `all` and
- *                 directly holds exactly `hosts` and exactly the child groups `children` (each compared as a set, when given)
+ *                 directly holds exactly `hosts` and exactly the child groups `children` (each compared as a set; left out means none)
  * @returns { ok, output, hint?, failedCheck? } like checkWrite. The checks run on the inventory Ansible ended up with, even after
  *          it failed to parse the file; an inventory Ansible warned about is never correct, but a failing check speaks first.
  */
@@ -587,13 +586,11 @@ function checkInventory(exercise, source) {
   const reachable = new Set();
   const walk = (g) => { if (!reachable.has(g)) { reachable.add(g); inv.groups.get(g).children.forEach(walk); } };
   walk('all');
-  const same = (have, want) => have.length === want.length && want.every((x) => have.includes(String(x)));
+  const sameSet = (have, want) => have.length === want.length && want.every((x) => have.includes(String(x)));
   const checks = exercise.checks ?? [];
   const i = checks.findIndex((c) => {
-    const bad = Object.keys(c).find((k) => !['group', 'hosts', 'children', 'hint'].includes(k));
-    if (bad) throw new Error(`unknown check key ${bad} in exercise ${exercise.id}: ${JSON.stringify(c)}`);
     const g = reachable.has(c.group) && inv.groups.get(c.group);
-    return !g || (c.hosts && !same(g.hosts, c.hosts)) || (c.children && !same(g.children, c.children));
+    return !g || !sameSet(g.hosts, c.hosts ?? []) || !sameSet(g.children, c.children ?? []);
   });
   if (i >= 0) return fail(inv.output, checks[i].hint, i + 1);
   if (/^\[WARNING\]/m.test(inv.output)) return fail(inv.output);
@@ -617,7 +614,9 @@ function parse(src, registry, kw) {
   }
   if (!data.length) return err(`A playbook must contain at least one play: ${PATH}`);
 
+  // Real errors anywhere come first; then the first thing the course does not simulate gets its hint.
   const plays = [];
+  let hint;
   for (const [pi, ds] of data.entries()) {
     const pnode = root.items[pi];
     if (!isMap(ds)) return err("playbook entries must be either valid plays or 'import_playbook' statements", ctx(ds, pnode));
@@ -652,9 +651,9 @@ function parse(src, registry, kw) {
           const run = pyRepr(value.slice(a, b));
           return err(`A malformed block was encountered while loading block: The ds (${run}) should be a dict but was a <class 'list'>`, `Origin: <unknown>\n\n${shorten(run)}`);
         }
-        // ponytail: block/rescue/always arrive with module 5; until then a block is an unresolved action 'block'.
-        const task = parseTask(t, tnode, list === 'handlers', registry, kw, err, at, ctx);
+        const task = parseTask(t, tnode, list === 'handlers', isMap(ds.vars) ? ds.vars : {}, registry, kw, err, at, ctx);
         if ('error' in task) return task;
+        if (task.hint) { hint ??= task.hint; continue; }
         [task.line, task.col] = lineCol(src, tnode.pos); // where output.js points a failed task's Origin
         if (task.rawParams) { // Ansible's "caused by" Origin is the action key
           const [line, col] = lineCol(src, task.rawParams.pos);
@@ -672,16 +671,26 @@ function parse(src, registry, kw) {
         if (bad !== undefined) return err(`Hosts list contains an invalid host value: '${pyStr(bad)}'`);
       } else if (typeof h !== 'string') return err('Hosts list must be a sequence or string. Please check your playbook.');
     }
+    const { name, vars, ...rest } = ds;
+    const odd = Object.keys(ds).find((k) => !PLAY_KEYS.has(k));
+    hint ??= (odd && notYet(odd)) ?? reservedVar(Object.keys(vars ?? {}), kw)
+      ?? templateHint(name, scalars(vars)) ?? templateHint(Object.fromEntries(Object.entries(rest).filter(([k]) => !TASK_LISTS.has(k))), {});
     plays.push(play);
   }
   // ponytail: Ansible checks the required hosts when it reaches the play; for a later play that is after earlier plays ran.
   const missing = data.findIndex((p) => !('hosts' in p));
   if (missing >= 0) return err("The field 'hosts' is required but was not set.", at(root.items[missing]));
+  if (hint) return { error: '', hint };
+  // ponytail: Ansible warns about a repeated key and keeps the last value; the playbook path does not print that warning (inventories do).
+  if (tree.dups.length) return { error: '', hint: `Remove the repeated \`${tree.dups[0].str}\` key: YAML keeps only its last value, and this course doesn't simulate the warning Ansible prints about it.` };
   return { plays };
 }
 
-// Action resolution as in ansible-core's parsing/mod_args.py (parse with skip_action_validation, then resolve).
-function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
+// Action resolution as in ansible-core's parsing/mod_args.py (parse with skip_action_validation, then resolve). A task the course
+// cannot run as written comes back as { hint }.
+function parseTask(t, tnode, handler, playVars, registry, kw, err, at, ctx) {
+  const blockKey = ['block', 'rescue', 'always'].find((k) => k in t); // ponytail: blocks arrive with module 5
+  if (blockKey) return { hint: notYet(blockKey) };
   const cands = [];
   for (const k of ['action', 'local_action']) {
     if (!(k in t)) continue;
@@ -711,7 +720,7 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
   if (mod === undefined) return err('no module/action detected in task.', at(tnode));
   const { module, spec, real, twin, tombstone } = lookup(mod, registry);
   if (tombstone) return err(tombstone.message, at(tnode)); // golden: tombstone-include, tombstone-module
-  if (real && !spec) return { error: '', hint: notSimulated(mod) };
+  if (real && !spec) return { hint: notSimulated(mod) };
   if (!spec) return err(`couldn't resolve module/action '${mod}'. This often indicates a misspelling, missing collection, or incorrect module path.`, at(tnode));
 
   if ('vars' in t && t.vars !== null && !isMap(t.vars)) {
@@ -724,34 +733,129 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
   args = { ...(isMap(extra) ? extra : {}), ...args }; // the `args` keyword stays in keywords too
   const keywords = Object.fromEntries(Object.entries(t).filter(([k]) => k !== 'name' && !cands.includes(k)));
   if ('local_action' in t) keywords.delegate_to = 'localhost';
+
+  // What the course does not simulate: unmodeled keywords, changed_when expressions, reserved names, templates beyond {{ name }}.
+  const odd = Object.keys(keywords).find((k) => !TASK_KEYS.has(k));
+  if (odd) return { hint: notYet(odd) };
+  const cw = keywords.changed_when;
+  if ('changed_when' in keywords && typeof cw !== 'boolean' && !/^(true|false)$/i.test(cw)) {
+    return { hint: "This course doesn't simulate a `changed_when` expression yet; use true or false." };
+  }
+  const taskVars = isMap(t.vars) ? t.vars : {};
+  const reserved = reservedVar([...Object.keys(taskVars), ...(typeof t.register === 'string' ? [t.register] : [])], kw);
+  if (reserved) return { hint: reserved };
+  const known = { ...scalars(playVars), ...scalars(taskVars), inventory_hostname: '{{ inventory_hostname }}' };
+  const { vars: _, ...used } = keywords;
+  const tplHint = templateHint(t.name, handler ? {} : known) ?? templateHint(args, known) ?? templateHint(used, known);
+  if (tplHint) return { hint: tplHint };
+  if (typeof extra === 'string' || ('_raw_params' in args && !spec.freeform && /^\{\{[\s\S]*\}\}$/.test(args._raw_params))) {
+    return { hint: "This course doesn't simulate module arguments given as one variable yet." };
+  }
+  const both = normalise(spec, args);
+  if (both) return { hint: both };
+
   // action: the module as written, which Ansible's TASK banner shows for an unnamed task.
   const task = { ...('name' in t && { name: t.name }), module, action: mod, args, keywords };
-
-  if ('_raw_params' in args && !spec.freeform) {
-    // A lone "{{ var }}" is the variable params of a mapping, which the simulator cannot see; anything else is rejected before the module runs.
-    if (/^\{\{[\s\S]*\}\}$/.test(args._raw_params)) delete args._raw_params;
-    else task.rawParams = child(tnode, key)?.key ?? tnode; // the action key's node; the caller turns it into { line, col }
+  if ('_raw_params' in args && !spec.freeform) task.rawParams = child(tnode, key)?.key ?? tnode; // the caller turns it into { line, col }
+  else {
+    // choices and required_if compare values, so play and task variables are filled in (inventory_hostname differs per host)
+    const filled = Object.fromEntries(Object.entries(args).map(([k, v]) => [k, tpl(v, { ...scalars(playVars), ...scalars(taskVars) })]));
+    const failure = moduleFailure(module, spec, mod, filled, twin);
+    if (typeof failure === 'string') return { hint: failure };
+    if (failure) Object.assign(task, { unsupported: failure.msg }, failure.via && { via: failure.via });
+    // ponytail: Ansible prints a template-error warning for an unset debug var; the course does not reproduce it.
+    const all = { ...playVars, ...taskVars, inventory_hostname: '' };
+    if (!failure && module === 'ansible.builtin.debug' && 'var' in args && (!Object.hasOwn(all, args.var) || unknownTemplate(all[args.var], {}) !== undefined)) {
+      return { hint: `This course doesn't simulate \`debug: var=${args.var}\` yet: it shows only a variable the play or task sets, with no template in it.` };
+    }
   }
-  const bad = !task.rawParams && argsError(spec, mod, args, twin);
-  if (bad) task.unsupported = bad;
-  normalise(spec, args);
   return task;
 }
 
-// Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
-// The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
-// The module's own argument check (module_utils/common/arg_spec.py), as the first error it reports: a value outside a parameter's
-// `choices` (modules.yaml, in argument-spec order) comes before unknown parameters, which are added last. Exact and case-sensitive,
-// except that "True"/"False" stand for the one choice that is a boolean word. A value with {{ }} or {% %} is unknown until run time.
-// ponytail: only string values are checked (Ansible first converts others, with a warning), and two bad values report in doc order.
+// Templates the simulator can fill in: {{ name }} of a variable in vars. The first string in value with any other template
+// ({{ x | filter }}, an undefined name, {% %}) is the template Ansible would treat in ways the course cannot work out.
+function unknownTemplate(value, vars) {
+  if (typeof value === 'string') return /\{\{|\{%|\{#/.test(value.replace(/\{\{\s*(\w+)\s*\}\}/g, (m, n) => (Object.hasOwn(vars, n) ? '' : m))) ? value : undefined;
+  if (value !== null && typeof value === 'object') {
+    for (const v of Object.values(value)) {
+      const u = unknownTemplate(v, vars);
+      if (u !== undefined) return u;
+    }
+  }
+  return undefined;
+}
+const templateHint = (value, vars) => {
+  const u = unknownTemplate(value, vars);
+  return u === undefined ? undefined : `This course doesn't simulate \`${u}\` yet: it works out only {{ name }} of a variable the play or task sets.`;
+};
+// The variables a {{ name }} may use: strings without a template of their own, numbers and booleans.
+const scalars = (vars) => Object.fromEntries(Object.entries(vars ?? {}).filter(([, v]) =>
+  typeof v === 'number' || typeof v === 'boolean' || (typeof v === 'string' && unknownTemplate(v, {}) === undefined)));
+// vars/reserved.py: Ansible warns about a variable named like a keyword (the course does not print that warning).
+const reservedVar = (names, kw) => {
+  const n = names.find((x) => x !== 'vars' && kw.reserved.includes(x));
+  return n && `Ansible reserves the name \`${n}\` and warns about a variable that uses it; this course doesn't simulate that warning. Pick another name.`;
+};
+
+// Why Ansible would fail this task's arguments at run time: { msg, via? } (via: see parsePlaybook), a string for what the course
+// cannot print (a hint), or undefined. Action plugins check first (plugins/action/copy.py, template.py; goldens copy-*, template-*),
+// then the module's own argument check (argsError). ponytail: copy's src and template's src are taken to exist on the controller.
+function moduleFailure(module, spec, mod, args, twin) {
+  const given = (p) => args[p] !== undefined && args[p] !== null;
+  let msg;
+  if (module === 'ansible.builtin.copy') {
+    msg = pyFalsy(args.src ?? null) && !given('content') ? 'src (or content) is required' : pyFalsy(args.dest ?? null) ? 'dest is required'
+      : !pyFalsy(args.src ?? null) && given('content') ? 'src and content are mutually exclusive'
+      : given('content') && String(args.dest).endsWith('/') ? 'can not use content with a dir as dest' : undefined;
+    if (msg) return { msg, via: 'action' };
+  }
+  if (module === 'ansible.builtin.template') {
+    msg = given('state') ? "'state' cannot be specified on a template" : !given('src') || !given('dest') ? 'src and dest are required' : undefined;
+    if (msg) return { msg, via: 'raised' };
+  }
+  const empty = spec.required.find((p) => args[p] === null);
+  if (empty) return `This course doesn't simulate an empty \`${empty}\` yet.`; // the module accepts it, then fails in ways not captured
+  msg = argsError(spec, mod, args, twin);
+  if (!msg) return undefined;
+  // after copy's action plugin, the module's failure also carries the file's checksum
+  if (module === 'ansible.builtin.copy' || module === 'ansible.builtin.template') {
+    return "This course doesn't simulate this copy failure yet: Ansible's message would include the file's checksum.";
+  }
+  return module === 'ansible.builtin.debug' ? { msg, via: 'debug' } : { msg };
+}
+
+// The module's own argument check (module_utils/common/arg_spec.py) over canonical names, as the first error it reports:
+// mutually_exclusive, required, choices, then (with defaults that are not None filled in) required_one_of, required_if,
+// required_by, and unsupported parameters last. Data: modules.yaml, from ansible-core's own argument specs.
+// choices: values are compared as Ansible converts them to a string (True, None, 7), exact and case-sensitive, except that
+// "True"/"False" stand for the one choice that is a boolean word; a value still holding {{ }} is unknown until run time.
+// Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text); the message
+// names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
+// ponytail: parameter types are not checked (a list where a string belongs), and two bad values report in doc order.
 const BOOL_WORDS = { True: ['y', 'yes', 'on', '1', 'true', 't'], False: ['n', 'no', 'off', '0', 'false', 'f'] };
 function argsError(spec, mod, args, twin) {
-  const named = normalise(spec, { ...args });
-  for (const [p, choices] of Object.entries(spec.choices ?? {})) {
-    const v = named[p];
-    if (typeof v !== 'string' || /\{\{|\{%/.test(v) || choices.includes(v)) continue;
+  // The specs name an option as the module does; args use ansible-doc's name, which differs once (apt's package is doc's name).
+  const a = { ...spec.defaults, ...args }, given = (p) => (spec.aliases[p] ?? p) in a, value = (p) => a[spec.aliases[p] ?? p];
+  const mutex = (spec.mutually_exclusive ?? []).filter((g) => g.filter((p) => (spec.aliases[p] ?? p) in args).length > 1);
+  if (mutex.length) return `parameters are mutually exclusive: ${mutex.map((g) => g.join('|')).join(', ')}`;
+  const missing = spec.required.filter((p) => !given(p));
+  if (missing.length) return `missing required arguments: ${missing.join(', ')}`;
+  for (const [p, choices] of Object.entries(spec.choices)) {
+    if (!(p in args)) continue;
+    const v = pyStr(args[p]);
+    if (/\{\{|\{%/.test(v) || choices.includes(v)) continue;
     if (Object.hasOwn(BOOL_WORDS, v) && choices.filter((c) => BOOL_WORDS[v].includes(c)).length === 1) continue;
     return `value of ${p} must be one of: ${choices.join(', ')}, got: ${v}`;
+  }
+  const one = (spec.required_one_of ?? []).find((g) => !g.some(given));
+  if (one) return `one of the following is required: ${one.join(', ')}`;
+  for (const [k, v, need, any] of spec.required_if ?? []) {
+    const lack = given(k) && same(value(k), v) ? need.filter((p) => !given(p)) : [];
+    if (lack.length && lack.length >= (any ? need.length : 1)) return `${k} is ${pyStr(v)} but ${any ? 'any' : 'all'} of the following are missing: ${lack.join(', ')}`;
+  }
+  for (const [k, need] of Object.entries(spec.required_by ?? {})) {
+    const lack = value(k) == null ? [] : need.filter((p) => value(p) == null);
+    if (lack.length) return `missing parameter(s) required by '${k}': ${lack.join(', ')}`;
   }
   const [, names, aliases = ''] = /^(.*?)(?: \((.*)\))?\.$/.exec(spec.supported);
   const legal = new Set([...spec.params, ...Object.keys(spec.aliases), ...`${names}, ${aliases}`.split(', ')]);
@@ -761,6 +865,7 @@ function argsError(spec, mod, args, twin) {
 }
 
 const fqcn = (name) => name.includes('.') ? name : `ansible.builtin.${name}`;
+const builtinName = (name) => fqcn(name).replace(/^ansible\.legacy\./, 'ansible.builtin.');
 const notSimulated = (mod) => `This course doesn't simulate ${mod} yet.`;
 
 // A module name as real Ansible resolves it, from modules.yaml: `known` lists every real ansible.builtin module, `twins` and `redirects`
@@ -770,9 +875,7 @@ const notSimulated = (mod) => `This course doesn't simulate ${mod} yet.`;
 //   tombstone: removed; real: Ansible resolves the name even when the course has no spec for it. Only a name that is not real gets
 //   Ansible's "couldn't resolve" / "Cannot resolve" error.
 function lookup(name, registry) {
-  const fq = fqcn(name);
-  const legacy = fq.startsWith('ansible.legacy.');
-  const builtin = legacy ? fq.replace('ansible.legacy.', 'ansible.builtin.') : fq;
+  const builtin = builtinName(name), legacy = builtin !== fqcn(name);
   const twin = registry.twins?.[builtin];
   const module = registry.redirects?.[builtin] ?? twin ?? builtin;
   const tombstone = registry.tombstones?.[builtin];
@@ -782,12 +885,16 @@ function lookup(name, registry) {
   };
 }
 
-// Aliases are accepted by Ansible; checks compare canonical names.
+// Aliases are accepted by Ansible; checks compare canonical names. Returns a hint when an option and its alias are both set:
+// Ansible then uses the alias and warns, a warning the course does not print.
 function normalise(spec, args) {
   for (const [alias, name] of Object.entries(spec.aliases)) {
-    if (alias in args) { args[name] ??= args[alias]; delete args[alias]; }
+    if (!(alias in args)) continue;
+    if (name in args) return `Set ${name} or its alias ${alias}, not both.`;
+    args[name] = args[alias];
+    delete args[alias];
   }
-  return args;
+  return undefined;
 }
 
 // ---- Free-form k=v arguments (ansible/parsing/splitter.py: split_args, parse_kv, join_args) ------------------------
@@ -1050,10 +1157,7 @@ function nodeTree(src, events) {
   return root;
 }
 
-const isStrKey = (n) => {
-  if (!n.plain) return true;
-  try { return typeof yaml.load(n.str, { schema: SCHEMA }) === 'string'; } catch { return true; }
-};
+const isStrKey = (n) => typeof keyOf(n.str, n) === 'string';
 
 // A mapping node's entry for key k ({ key, value }); undefined for aliases and merged (<<) keys.
 const child = (node, k) => node.keys?.get(k);

@@ -2,8 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as yaml from '../vendor/js-yaml.mjs';
-import { checkChoice, checkCommand, parseCommand } from '../checker.js';
-import { renderAdhoc } from '../output.js';
+import { checkCommand, parseCommand } from '../checker.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const registry = yaml.load(read('../modules.yaml'));
@@ -57,7 +56,7 @@ test('quoted arguments with spaces survive; backslashes escape; single quotes ar
   assert.deepEqual(args('-a echo\\ hello\\ world', 'command'), { _raw_params: 'echo hello world' });
   assert.deepEqual(args('-a "echo hello world"', 'command'), { _raw_params: 'echo hello world' });
   assert.deepEqual(args(`-a ''`, 'command'), {});
-  assert.deepEqual(args('-a "a=1" -a "b=2"', 'debug'), { b: '2' });
+  assert.deepEqual(args('-a "a=1" -a "b=2"', 'ping'), { b: '2' });
 });
 
 test('-a accepts a JSON mapping, like the real option', () => {
@@ -141,22 +140,13 @@ test('--limit: intersects with the pattern; empty and unmatched limits are the r
   assert.equal(run('ansible web -m ping --limit=db1 -l web').output, run('ansible web -m ping').output); // the last -l wins
 });
 
-test('--list-hosts prints what real ansible lists, for every pattern captured from it', () => {
-  for (const { pattern, output } of JSON.parse(read('./golden/list-hosts.json'))) {
-    assert.equal(run(`ansible '${pattern}' --list-hosts`).output, output, pattern);
-  }
-});
-
-test('a `<group>:children` key makes a group of groups, as [group:children] does in INI; list order is the real one', () => {
+// A `<group>:children` key makes a group of groups, as [group:children] does in INI (list-hosts-checkpoint, nested groups).
+test('--list-hosts prints what real ansible lists, for every pattern captured from it; list order is the real one', () => {
   const nested = { web: ['web1', 'web2', 'web3', 'dev1'], db: ['db1', 'db2', 'dev1'], prod: ['web1', 'web2', 'db1'], staging: ['web3', 'db2'],
     dev: ['dev1'], 'nonprod:children': ['staging', 'dev'] }; // tools/fixtures/inventory-checkpoint.ini
-  for (const { pattern, output } of JSON.parse(read('./golden/list-hosts-checkpoint.json'))) {
-    assert.equal(renderAdhoc(parseCommand(`ansible '${pattern}' --list-hosts`, registry), nested), output, pattern);
+  for (const [file, inventory] of [['list-hosts', multi], ['list-hosts-checkpoint', nested]]) {
+    for (const { pattern, output } of JSON.parse(read(`./golden/${file}.json`))) assert.equal(run(`ansible '${pattern}' --list-hosts`, { inventory }).output, output, pattern);
   }
-});
-
-test('renderAdhoc takes parseCommand(...) and the inventory', () => {
-  assert.equal(renderAdhoc(parseCommand('ansible web -m ping', registry), web), golden('adhoc-ping'));
 });
 
 test('exercise output replaces the generated output on success; failures still show the real run', () => {
@@ -209,24 +199,9 @@ test('a dash inside a quoted value is just text', () => {
   assert.equal(run('ansible web -m ping -a \'data="a \u2013 b"\'').ok, true);
 });
 
-test('an unknown key in a check is a content bug, not a silent pass', () => {
-  assert.throws(() => run('ansible web -m ping', {}, [{ modul: 'ping' }]), /unknown check/);
-});
-
 test('flags: -bK style clusters, repeated and appended options', () => {
   const c = parseCommand('ansible web -m ping -bk -e a=1 --extra-vars b=2 --limit web1 --become-user=app', registry);
   assert.deepEqual(c.flags, { become: true, 'ask-pass': true, 'extra-vars': ['a=1', 'b=2'], limit: 'web1', 'become-user': 'app' });
-});
-
-test('checkChoice returns whether the option is correct, and its why', () => {
-  const choice = {
-    id: 'c', type: 'choice', question: 'q',
-    options: [{ text: 'a', correct: false, why: 'Not a.' }, { text: 'b', correct: true, why: 'Because b.' }, { text: 'c', why: 'Nor c.' }],
-  };
-  assert.deepEqual(checkChoice(choice, 0), { ok: false, why: 'Not a.' });
-  assert.deepEqual(checkChoice(choice, 1), { ok: true, why: 'Because b.' });
-  assert.deepEqual(checkChoice(choice, 2), { ok: false, why: 'Nor c.' });
-  assert.deepEqual(checkChoice(choice, 7), { ok: false, why: '' });
 });
 
 test('hosts check: the hosts the command targets after --limit, in any order, however the pattern is spelt', () => {
@@ -336,6 +311,30 @@ test('an ansible line in an exercise with no inventory (an ansible-doc exercise)
   for (const line of ['ansible web -m ping', 'ansible all -m systemd_service -a name=nginx']) {
     assert.deepEqual(doc(line, snippet, { output: 'x' }), { ok: false, output: '', hint: 'Show the snippet.', failedCheck: 1 }, line);
   }
+});
+
+test('ad hoc: missing required arguments and the copy and template action plugins fail as real ansible prints them', () => {
+  assert.equal(run('ansible web -m file').output, golden('adhoc-missing-required'));
+  assert.equal(run('ansible web -m copy -a dest=/tmp/app.conf').output, golden('adhoc-copy-no-src'));
+  assert.equal(run('ansible web -m template -a dest=/tmp/app.conf').output, golden('adhoc-template-no-src'));
+  assert.equal(run('ansible web -m file', {}, [{ module: 'file', hint: 'h' }]).ok, false);
+});
+
+test('ad hoc: failures whose real text the course cannot print are a hint (debug checks, copy checksums, alias and option both set)', () => {
+  for (const [line, hint] of [
+    ["ansible web -m debug -a 'msg=a var=b'", /doesn't simulate this debug failure/],
+    ["ansible web -m copy -a 'content=x dest=/tmp/x bogus=1'", /checksum/],
+    ["ansible web -m file -a 'path=/x dest=/y state=touch'", /Set path or its alias dest, not both/],
+  ]) {
+    const r = run(line, {}, [{ pattern: 'web', hint: 'h' }]);
+    assert.deepEqual([r.ok, r.output], [false, ''], line);
+    assert.match(r.hint, hint, line);
+  }
+});
+
+test('--list-hosts prints the real list even when a check fails (it runs no module)', () => {
+  const r = run('ansible web --list-hosts', {}, [{ hosts: ['web1'], hint: 'Only web1.' }]);
+  assert.deepEqual(r, { ok: false, output: '  hosts (2):\n    web1\n    web2\n', hint: 'Only web1.', failedCheck: 1 });
 });
 
 test('ad hoc: a value outside the choices fails as real ansible prints it', () => {
