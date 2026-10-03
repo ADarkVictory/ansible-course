@@ -1,6 +1,6 @@
 - id: ansible-cfg-1
   type: choice
-  question: Your test VMs are destroyed and rebuilt every night, each with a new SSH host key. The next run cannot connect to them because SSH stops at the host key check. Which change to the project's `ansible.cfg` lets the runs through?
+  question: Your test VMs are created every night with new addresses, so SSH has never seen their host keys and the run stops at the host key check. Which change to the project's `ansible.cfg` lets the runs through?
   options:
     - text: "`host_key_checking = False` under `[privilege_escalation]`"
       correct: false
@@ -8,12 +8,12 @@
     - text: None; host keys are SSH's business and can only be changed in `~/.ssh/config`
       correct: false
       why: "`~/.ssh/config` would work too, but Ansible has its own setting for this: `host_key_checking` under `[defaults]`, which travels with the project."
-    - text: "`inventory` pointing at a freshly written inventory file each night, so Ansible treats the hosts as new"
+    - text: "`become = True` under `[privilege_escalation]`, so that Ansible may accept the new keys as root"
       correct: false
-      why: The stored keys live in SSH's `known_hosts`, not in the inventory. A new inventory with the same names and addresses meets the same old keys.
+      why: Become acts after Ansible has logged in, when it runs tasks on the managed node. The host key check stops the connection before that, so become never comes into play.
     - text: "`host_key_checking = False` under `[defaults]`"
       correct: true
-      why: Ansible then passes `-o StrictHostKeyChecking=no` to `ssh`, so new or changed keys no longer stop the connection. It also drops the check that you reached the right machine; fine for throwaway VMs, not for production.
+      why: Ansible then passes `-o StrictHostKeyChecking=no` to `ssh`, so host keys SSH has not seen before no longer stop the connection. It also drops the check that you reached the right machine; fine for throwaway VMs, not for production.
 
 - id: ansible-cfg-2
   type: choice

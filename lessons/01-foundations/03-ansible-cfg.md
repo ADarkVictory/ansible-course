@@ -22,7 +22,7 @@ become_user = root
 - `[defaults]` and `[privilege_escalation]` are sections. Each setting belongs to one, and Ansible reads it only there: `become = True` under `[defaults]` is ignored without a warning. So is a misspelt key.
 - A line starting with `#` or `;` is a comment. After a value, only `;` starts a comment: `remote_user = deploy # ops` sets the user to `deploy # ops`.
 
-`ansible-config list` documents every setting: its section, key, default and environment variable.
+`ansible-config list` documents every setting, with its default and where it can be set: section and key, environment variable.
 
 ## inventory, remote_user, forks
 
@@ -34,7 +34,7 @@ become_user = root
 
 With the default, `True`, Ansible leaves host keys to your SSH settings (`known_hosts`, `StrictHostKeyChecking`).
 
-`False` makes Ansible pass `-o StrictHostKeyChecking=no` to `ssh`, so new or changed host keys no longer stop the connection. That also drops the check that you reached the right machine. It is common for labs and throwaway VMs; in production, put the real host keys in `known_hosts` instead.
+`False` makes Ansible pass `-o StrictHostKeyChecking=no` to `ssh`, so host keys SSH has not seen before no longer stop the connection. That also drops the check that you reached the right machine. It is common for labs and throwaway VMs; in production, put the real host keys in `known_hosts` instead.
 
 <!-- exercise: ansible-cfg-1 -->
 
@@ -120,7 +120,7 @@ Ansible skips `ansible.cfg` in the current directory when that directory is worl
 [WARNING]: Ansible is being run in a world writable directory (/home/student/shared), ignoring it as an ansible.cfg source. For more information see https://docs.ansible.com/ansible/devel/reference_appendices/config.html#cfg-in-world-writable-dir
 ```
 
-You meet this on shared checkouts with mode `777`, and on Windows drives mounted under WSL, where directories show as `777` by default and `chmod` may not stick. Remove write access for others, or name the file in `ANSIBLE_CONFIG`: a file named there is used wherever it is.
+You meet this on shared checkouts with mode `777`. Remove write access for others, or name the file in `ANSIBLE_CONFIG`: a file named there is used wherever it is.
 
 <!-- exercise: ansible-cfg-5 -->
 
@@ -129,7 +129,7 @@ You meet this on shared checkouts with mode `777`, and on Windows drives mounted
 The config file is the weakest layer. From weakest to strongest:
 
 1. `ansible.cfg`
-2. environment variables: every setting has one, shown by `ansible-config list`. For the settings above: `ANSIBLE_INVENTORY`, `ANSIBLE_REMOTE_USER`, `ANSIBLE_FORKS`, `ANSIBLE_HOST_KEY_CHECKING`, `ANSIBLE_BECOME`, `ANSIBLE_BECOME_METHOD`, `ANSIBLE_BECOME_USER`
+2. environment variables: almost every setting has one, shown by `ansible-config list`. For the settings above: `ANSIBLE_INVENTORY`, `ANSIBLE_REMOTE_USER`, `ANSIBLE_FORKS`, `ANSIBLE_HOST_KEY_CHECKING`, `ANSIBLE_BECOME`, `ANSIBLE_BECOME_METHOD`, `ANSIBLE_BECOME_USER`
 3. command-line options: `-i`, `-u`, `-f` (forks), `-b` (become), `--become-user`
 4. keywords in a play, such as `remote_user:` and `become:`
 5. variables, such as `ansible_user` in the inventory
