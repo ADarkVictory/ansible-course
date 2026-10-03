@@ -1,7 +1,7 @@
 // Pure ES module, no DOM: the browser and Node run the same code.
 // parsePlaybook turns playbook text into plays, or into the exact error ansible-core 2.21.4 prints for it.
 import * as yaml from './vendor/js-yaml.mjs';
-import { render, renderAdhoc, renderGraph } from './output.js'; // output.js imports format/excerpt back; both only call each other at run time, so the cycle is harmless.
+import { render, renderAdhoc, renderGraph, resolveHosts } from './output.js'; // output.js imports format/excerpt back; both only call each other at run time, so the cycle is harmless.
 
 const PATH = '/home/student/playbook.yml';
 const INV = '/home/student/inventory.yml';
@@ -139,6 +139,25 @@ function shellWords(line) {
   return words;
 }
 
+// What an interactive bash does to a line before ansible sees it, beyond splitting it into words: an unquoted & | ; < > is an operator,
+// and a ! outside single quotes starts history expansion (event not found, or an earlier command pasted in) unless a blank, =, ( or "
+// follows. A backslash escapes both. A hint, or undefined when bash passes the line through as shellWords reads it.
+function shellTrap(line) {
+  let q = null;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q === "'") { if (c === "'") q = null; }
+    else if (c === '\\') i++;
+    else if (c === '"') q = q ? null : c;
+    else if (!q && c === "'") q = c;
+    else if (!q && '&|;<>'.includes(c)) return `Your shell would read an unquoted ${c} as an operator and never pass it to ansible: quote the pattern or the -a value that contains it.`;
+    else if (c === '!' && !/[\s=("]/.test(line[i + 1] ?? ' ')) {
+      return 'In an interactive shell, ! starts history expansion, even inside double quotes: bash would change the line or stop with "event not found". Use single quotes, as in \'prod:!db\'.';
+    }
+  }
+  return undefined;
+}
+
 // argparse's reading of the words after `ansible`: { flags, pos } or { error } (a hint, in the course's words).
 function parseArgv(argv) {
   const flags = {}, pos = [];
@@ -191,6 +210,8 @@ export function parseCommand(line, registry) {
   if (!words) return { hint: 'Close the quote you opened.' };
   if (!words.length) return { hint: 'Type a command.' };
   if (words.some((w) => /^[\u2013\u2014]/.test(w))) return { hint: DASH_HINT }; // iOS Smart Punctuation: -- becomes an em dash, - an en dash
+  const trap = shellTrap(String(line));
+  if (trap) return { hint: trap };
   const [program, ...argv] = words;
   if (program !== 'ansible') return { program, hint: `"${program}" is not part of this exercise; use the ansible command.` };
   const { flags, pos, error } = parseArgv(argv);
@@ -216,8 +237,9 @@ export function parseCommand(line, registry) {
 
 /**
  * Decides whether a learner's command meets a `command` exercise.
- * @param exercise { inventory, checks: [{ program?, pattern?, module?, args?, flags?, hint? }], stdout?, output? }
- *                 a check passes when every key it names matches (args and flags: the keys it names); `stdout` is what a command
+ * @param exercise { inventory, checks: [{ program?, pattern?, hosts?, module?, args?, flags?, hint? }], stdout?, output? }
+ *                 a check passes when every key it names matches (args and flags: the keys it names; hosts: the hosts the pattern
+ *                 and --limit select, in any order, so 'prod:&web' meets a check written for 'web:&prod'); `stdout` is what a command
  *                 or shell module prints; `output` replaces the generated output on success (modules the simulator cannot run).
  * @returns { ok, output, hint?, failedCheck? } failedCheck is the 1-based index into exercise.checks.
  */
@@ -229,13 +251,18 @@ export function checkCommand(exercise, line, registry) {
   if (/^\[ERROR\]: /m.test(shown)) return fail(shown);
   const checks = exercise.checks ?? [];
   const canonical = (m) => m.includes('.') ? m : `ansible.builtin.${m}`;
+  // The hosts the command runs on: the pattern's, narrowed by --limit (as renderAdhoc does).
+  const targets = () => resolveHosts(cmd.pattern, exercise.inventory).hosts
+    .filter((h) => !cmd.flags.limit || resolveHosts(cmd.flags.limit, exercise.inventory).hosts.includes(h));
   const i = checks.findIndex((c) => {
-    const bad = Object.keys(c).find((k) => !['program', 'pattern', 'module', 'args', 'flags', 'hint'].includes(k));
+    const bad = Object.keys(c).find((k) => !['program', 'pattern', 'hosts', 'module', 'args', 'flags', 'hint'].includes(k));
     if (bad) throw new Error(`unknown check ${bad} in exercise ${exercise.id}: ${JSON.stringify(c)}`);
     return !((c.program ?? cmd.program) === cmd.program && (c.pattern ?? cmd.pattern) === cmd.pattern
+      && (!c.hosts || [...c.hosts].sort().join() === targets().sort().join())
       && canonical(c.module ?? cmd.module) === cmd.module && has(cmd.args, c.args) && has(cmd.flags, c.flags));
   });
-  if (i >= 0) return fail(shown, checks[i].hint, i + 1);
+  // The exercise's stdout is what the expected command prints; for any other command or shell line the real output is unknown.
+  if (i >= 0) return fail(/^ansible\.builtin\.(command|shell)$/.test(cmd.module) ? '' : shown, checks[i].hint, i + 1);
   return { ok: true, output: exercise.output ?? shown };
 }
 

@@ -70,7 +70,10 @@ test('every check uses only known keys', () => {
         for (const k of ['hosts', 'children'].filter((k) => k in c)) assert.ok(Array.isArray(c[k]) && c[k].every(nonEmpty), `${at}: ${k} must be a list of names`);
         return;
       }
-      if (e.type === 'command') return assert.deepEqual(Object.keys(c).filter((k) => !['program', 'pattern', 'module', 'args', 'flags', 'hint'].includes(k)), [], `${at}: unknown key`);
+      if (e.type === 'command') {
+        if ('hosts' in c) assert.ok(Array.isArray(c.hosts) && c.hosts.every(nonEmpty), `${at}: hosts must be a list of names`);
+        return assert.deepEqual(Object.keys(c).filter((k) => !['program', 'pattern', 'hosts', 'module', 'args', 'flags', 'hint'].includes(k)), [], `${at}: unknown key`);
+      }
       assert.deepEqual(Object.keys(c).filter((k) => !['play', 'task', 'handler', 'forbid', 'has', 'hint'].includes(k)), [], `${at}: unknown key`);
       const kinds = ['play', 'task', 'handler', 'forbid'].filter((k) => k in c);
       assert.equal(kinds.length, 1, `${at}: needs exactly one of play, task, handler, forbid`);

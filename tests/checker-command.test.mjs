@@ -220,3 +220,46 @@ test('checkChoice returns whether the option is correct, and its why', () => {
   assert.deepEqual(checkChoice(choice, 2), { ok: false, why: 'Nor c.' });
   assert.deepEqual(checkChoice(choice, 7), { ok: false, why: '' });
 });
+
+test('hosts check: the hosts the command targets after --limit, in any order, however the pattern is spelt', () => {
+  const check = [{ hosts: ['web1'], hint: 'Only the production web servers.' }];
+  for (const line of ["ansible 'web:&prod' -m ping", "ansible 'prod:&web' -m ping", "ansible 'web,&prod' -m ping", 'ansible web -m ping --limit prod', 'ansible web1 -m ping']) {
+    assert.equal(run(line, {}, check).ok, true, line);
+  }
+  assert.equal(run("ansible 'db:web' -m ping", {}, [{ hosts: ['web2', 'db1', 'web1'] }]).ok, true);
+  for (const line of ["ansible 'web:prod' -m ping", 'ansible web -m ping', 'ansible nosuch -m ping']) {
+    assert.deepEqual(run(line, {}, check).failedCheck, 1, line);
+  }
+});
+
+test('shell operators: an unquoted & | ; < > or a ! outside single quotes is the shell\'s, so a hint and no output', () => {
+  for (const [line, hint] of [
+    ['ansible web:&prod -m ping', /unquoted &/],
+    ['ansible web -m shell -a ss -tln | grep 443', /unquoted \|/],
+    ['ansible web -a echo hi; echo there', /unquoted ;/],
+    ['ansible web -a echo hi > /tmp/x', /unquoted >/],
+    ['ansible web:!db -m ping', /history expansion.*single quotes/],
+    ['ansible "web:!db" -m ping', /history expansion.*single quotes/],
+    [`ansible web -m shell -a "echo it's" | cat`, /unquoted \|/],
+    ['ansible web -m ping -a "data=hi!there"', /history expansion/],
+  ]) {
+    const r = run(line, {}, [{ pattern: 'web', hint: 'check hint' }]);
+    assert.equal(r.ok, false, line);
+    assert.equal(r.output, '', line);
+    assert.match(r.hint, hint, line);
+  }
+  // What bash passes through untouched: quoted operators, ! in single quotes or escaped, ! before a blank, = or the closing quote.
+  for (const line of ["ansible 'web:&prod' -m ping", 'ansible "web:&prod" -m ping', "ansible 'web:!db' -m ping", 'ansible web:\\!db -m ping',
+    "ansible web -m shell -a 'ss -tln | grep 443'", 'ansible web -m shell -a "echo a; echo b > /tmp/x"', 'ansible web -m ping -a "data=hi!"',
+    'ansible web -m ping -a "data=a! b"']) {
+    assert.equal(parseCommand(line, registry).hint, undefined, line);
+  }
+  assert.equal(parseCommand('ansible web:\\!db -m ping', registry).pattern, 'web:!db');
+});
+
+test('command and shell: a failed check shows no output, as the exercise stdout belongs to the expected command only', () => {
+  const ex = { stdout: 'LISTEN 0 511 0.0.0.0:443 0.0.0.0:*' };
+  const checks = [{ module: 'shell', hint: 'Pipes need a shell.' }];
+  assert.deepEqual(run("ansible web -a 'ss -tln | grep :443'", ex, checks), { ok: false, output: '', hint: 'Pipes need a shell.', failedCheck: 1 });
+  assert.match(run("ansible web -m shell -a 'ss -tln | grep :443'", ex, checks).output, /^web1 \| CHANGED \| rc=0 >>\nLISTEN/);
+});
