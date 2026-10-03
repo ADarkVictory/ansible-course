@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as yaml from '../vendor/js-yaml.mjs';
 import { parsePlaybook } from '../checker.js';
-import { render } from '../output.js';
+import { render, resolveHosts } from '../output.js';
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
 const registry = yaml.load(read('../modules.yaml'));
@@ -107,4 +107,33 @@ test('hosts: localhost is the implicit localhost; a partly matched list warns an
     '[WARNING]: Could not match supplied host pattern, ignoring: nope', '', `PLAY [web1,nope] ${'*'.repeat(63)}`, '',
     `TASK [ping] ${'*'.repeat(68)}`, 'ok: [web1]', '', `PLAY RECAP ${'*'.repeat(69)}`, RECAP('localhost', 1, 0) + RECAP('web1', 1, 0), '',
   ].join('\n'));
+});
+
+// Host patterns over tools/fixtures/inventory-multi.ini, checked against real `ansible <pattern> --list-hosts` (tests/golden/list-hosts.json).
+const multi = { web: ['web1', 'web2'], db: ['db1'], prod: ['web1', 'db1'], staging: ['web2'] };
+const WARN = (p) => `[WARNING]: Could not match supplied host pattern, ignoring: ${p}\n`;
+// What --list-hosts prints for a resolveHosts result.
+const listed = ({ hosts, unmatched }) => unmatched.map(WARN).join('')
+  + (hosts.length ? '' : '[WARNING]: No hosts matched, nothing to do\n')
+  + `  hosts (${hosts.length}):\n${hosts.map((h) => `    ${h}\n`).join('')}`;
+
+test('resolveHosts: web:&prod, web:!db, web1:web2 as real ansible lists them', () => {
+  assert.deepEqual(resolveHosts('web:&prod', multi).hosts, ['web1']);
+  assert.deepEqual(resolveHosts('web:!db', multi).hosts, ['web1', 'web2']);
+  assert.deepEqual(resolveHosts('web1:web2', multi).hosts, ['web1', 'web2']);
+  assert.deepEqual(resolveHosts('web2:web1', multi).hosts, ['web2', 'web1']);
+});
+
+for (const { pattern, output } of JSON.parse(read('./golden/list-hosts.json'))) {
+  test(`resolveHosts matches real --list-hosts: ${pattern}`, () => assert.equal(listed(resolveHosts(pattern, multi)), output));
+}
+
+test('resolveHosts: an array of patterns is split element by element (a play with hosts: [web, db:!db1])', () => {
+  assert.deepEqual(resolveHosts(['web', 'db:!db1'], multi), { hosts: ['web1', 'web2'], unmatched: [] });
+});
+
+test('render: hosts patterns (intersection, exclusion, comma form) and one warning per unmatched pattern per run', () => {
+  const { plays, error } = parsePlaybook(fixture('hosts-patterns'), registry, keywords);
+  assert.equal(error, undefined);
+  assert.equal(render(plays, multi, { source: fixture('hosts-patterns') }), golden('run-hosts-patterns'));
 });

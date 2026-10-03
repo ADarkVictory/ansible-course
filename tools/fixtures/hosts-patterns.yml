@@ -1,0 +1,20 @@
+- hosts: nosuch
+  gather_facts: false
+  tasks:
+    - ping:
+- hosts: web:nosuch
+  gather_facts: false
+  tasks:
+    - ping:
+- hosts: nosuch
+  gather_facts: false
+  tasks:
+    - ping:
+- hosts: web:!nosuch,db
+  gather_facts: false
+  tasks:
+    - ping:
+- hosts: web:&prod
+  gather_facts: false
+  tasks:
+    - ping:

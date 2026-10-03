@@ -1,0 +1,2 @@
+[WARNING]: Could not match supplied host pattern, ignoring: nosuch
+[ERROR]: Specified inventory, host pattern and/or --limit leaves us with no hosts to target.

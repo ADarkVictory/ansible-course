@@ -1,7 +1,8 @@
 // Pure ES module, no DOM: the browser and Node run the same code.
 // render prints what ansible-core 2.21.4's ansible-playbook prints (default callback, ANSIBLE_NOCOLOR=1, COLUMNS=80,
 // forks=1) for plays from checker.js's parsePlaybook. Formats are copied from tests/golden/run-*.txt and unsupported-param.txt.
-import { format, excerpt } from './checker.js';
+// renderAdhoc prints what `ansible <pattern> -m ...` prints (tests/golden/adhoc-*.txt); both share resolveHosts.
+import { format, excerpt, pyRepr } from './checker.js';
 
 const NEVER_CHANGES = new Set(['ansible.builtin.ping', 'ansible.builtin.debug', 'ansible.builtin.setup']);
 const RECAP = ['ok', 'changed', 'unreachable', 'failed', 'skipped', 'rescued', 'ignored'];
@@ -12,6 +13,46 @@ const banner = (msg) => `\n${msg} ${'*'.repeat(Math.max(3, 79 - msg.length))}\n`
 // json.dumps(indent=4, sort_keys=True, ensure_ascii=False), as the callback prints module results.
 const dump = (v) => JSON.stringify(v, (_, x) => x && typeof x === 'object' && !Array.isArray(x)
   ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a > b) - (a < b))) : x, 4);
+
+const WARN_UNMATCHED = (p) => `[WARNING]: Could not match supplied host pattern, ignoring: ${p}\n`;
+const LOCALHOST = ['localhost', '127.0.0.1', '::1'];
+
+/**
+ * Hosts a pattern selects, as ansible's inventory manager does (list order, never sorted).
+ * @param patterns  a pattern string or an array of them (a play's `hosts:`); each is split on `,`, or else on `:`
+ * @param inventory { group: [host, ...] }
+ * @returns { hosts, unmatched } unmatched: names that are neither a group nor a host (real Ansible warns once per name, per run)
+ * Patterns: plain host or group names, `all`, `*`/`?` globs, `a:b` union, `a:&b` intersection, `a:!b` exclusion.
+ * Evaluation order is Ansible's: plain patterns, then every `&`, then every `!`; with no plain pattern it starts from `all`.
+ * ponytail: `web[0]` subscripts, `~regex` patterns and nested groups are not resolved.
+ */
+export function resolveHosts(patterns, inventory) {
+  const everyone = [...new Set(Object.values(inventory).flat())];
+  const groups = { all: everyone, ungrouped: [], ...inventory };
+  groups.all = everyone;
+  const list = [patterns].flat().flatMap((p) => String(p).split(String(p).includes(',') ? /\s*,\s*/ : /\s*:\s*/)).map((p) => p.trim()).filter(Boolean);
+  const kind = (p) => (p[0] === '!' ? 2 : p[0] === '&' ? 1 : 0);
+  const plain = list.filter((p) => !kind(p));
+  const ordered = [...(plain.length ? plain : ['all']), ...list.filter((p) => kind(p) === 1), ...list.filter((p) => kind(p) === 2)];
+  const unmatched = new Set();
+  const match = (name) => {
+    const rx = new RegExp(`^${name.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.')}$`);
+    const gs = Object.keys(groups).filter((g) => rx.test(g));
+    const hs = everyone.filter((h) => rx.test(h));
+    if (!gs.length && !hs.length) {
+      if (LOCALHOST.includes(name)) return [name]; // the implicit localhost
+      unmatched.add(name);
+    }
+    return [...new Set([...gs.flatMap((g) => groups[g]), ...hs])];
+  };
+  let hosts = [];
+  for (const p of ordered) {
+    if (everyone.includes(p)) { hosts.push(p); continue; }
+    const that = match(kind(p) ? p.slice(1) : p);
+    hosts = kind(p) === 2 ? hosts.filter((h) => !that.includes(h)) : kind(p) === 1 ? hosts.filter((h) => that.includes(h)) : [...hosts, ...that];
+  }
+  return { hosts: [...new Set(hosts)], unmatched: [...unmatched] };
+}
 
 // ponytail: templating covers bare {{ name }} only (no filters or expressions); a lone {{ name }} keeps its type, as Ansible's does.
 function tpl(v, vars) {
@@ -58,17 +99,13 @@ function debugResult(a, vars) {
  * @param opts      { second?: run the playbook again over the first run's state, source?: the playbook text (for Origin) }
  */
 export function render(plays, inventory, { second = false, source = '' } = {}) {
-  const all = [...new Set(Object.values(inventory).flat())];
   const stats = {};
+  const warned = new Set(); // Display.warning prints a given message once per run
   let out = '';
 
   run: for (const play of plays) {
-    const hosts = [];
-    for (const p of [play.hosts].flat().flatMap((x) => String(x).split(',')).map((x) => x.trim())) {
-      const found = p === 'all' ? all : inventory[p] ?? (all.includes(p) || p === 'localhost' ? [p] : []);
-      if (!found.length) out += `[WARNING]: Could not match supplied host pattern, ignoring: ${p}\n`;
-      for (const h of found) if (!hosts.includes(h)) hosts.push(h);
-    }
+    const { hosts, unmatched } = resolveHosts([play.hosts].flat(), inventory);
+    for (const p of unmatched) if (!warned.has(p)) { warned.add(p); out += WARN_UNMATCHED(p); }
     out += banner(`PLAY [${play.name || [play.hosts].flat().join(',')}]`);
     if (!hosts.length) {
       out += 'skipping: no hosts matched\n';
@@ -139,4 +176,50 @@ export function render(plays, inventory, { second = false, source = '' } = {}) {
     out += `${h.padEnd(26)} : ${RECAP.map((k) => `${k}=${String(stats[h][k] ?? 0).padEnd(4)}`).join(' ')}\n`;
   }
   return `${out}\n`;
+}
+
+/**
+ * What `ansible <pattern> -m <module> -a <args>` prints (default callback, no -v), for checker.js's parseCommand.
+ * @param cmd       parseCommand(line, registry) of an `ansible` line
+ * @param inventory { group: [host, ...] }
+ * @param opts      { stdout?: what a command or shell module prints on every host }
+ * Simulated: ping, command, shell, --list-hosts, --limit, and Ansible's errors. Any other valid module prints nothing here;
+ * its exercise supplies `output`. Goldens: tests/golden/adhoc-*.txt, list-hosts.json.
+ */
+export function renderAdhoc(cmd, inventory, { stdout = '' } = {}) {
+  let out = '';
+  const warned = new Set();
+  const resolve = (pattern) => {
+    const r = resolveHosts(pattern, inventory);
+    for (const p of r.unmatched) if (!warned.has(p)) { warned.add(p); out += WARN_UNMATCHED(p); }
+    return r.hosts;
+  };
+  let hosts = resolve(cmd.pattern);
+  if (cmd.flags.limit) {
+    const keep = resolve(cmd.flags.limit);
+    hosts = hosts.filter((h) => keep.includes(h));
+    if (!hosts.length) return `${out}[ERROR]: Specified inventory, host pattern and/or --limit leaves us with no hosts to target.\n`;
+  }
+  if (!hosts.length) out += '[WARNING]: No hosts matched, nothing to do\n';
+  if (cmd.flags['list-hosts']) return `${out}  hosts (${hosts.length}):\n${hosts.map((h) => `    ${h}\n`).join('')}`;
+  if (cmd.noArg) return `${out}[ERROR]: No argument passed to ${cmd.mod} module\n`;
+  if (!hosts.length) return out;
+
+  const { mod } = cmd;
+  const each = (line) => hosts.map(line).join('');
+  const fatal = (msg) => each((h) => `${h} | FAILED! => ${dump({ changed: false, msg })}\n`);
+  const task = `{'action': ${pyRepr(mod)}, 'args': ${pyRepr(cmd.typedArgs)}, 'timeout': 0, 'async_val': 0, 'poll': 15}`;
+  // Golden: adhoc-unknown-module, adhoc-raw-params. Raised while preparing the task, so Ansible wraps it as "Task failed." caused by the -m option.
+  const why = !cmd.known ? `Cannot resolve '${mod}' to an action or module.` : cmd.rawParams && `Action '${cmd.module}' does not support raw params.`;
+  if (why) {
+    return `${out}[ERROR]: Task failed: ${why}\n\nTask failed.\nOrigin: <adhoc '${mod}' task>\n\n${task}\n\n<<< caused by >>>\n\n${why}\n`
+      + `Origin: <CLI option '-m'>\n\n${mod}\n\n${fatal(`Task failed: ${why}`)}`;
+  }
+  // Golden: adhoc-unsupported-param (short and FQCN spelling).
+  if (cmd.unsupported) return `${out}[ERROR]: Task failed: Module failed: ${cmd.unsupported}\nOrigin: <adhoc '${mod}' task>\n\n${task}\n\n${fatal(cmd.unsupported)}`;
+  switch (cmd.module) {
+    case 'ansible.builtin.ping': return out + each((h) => `${h} | SUCCESS => ${dump({ changed: false, ping: String(cmd.args.data ?? 'pong') })}\n`);
+    case 'ansible.builtin.command': case 'ansible.builtin.shell': return out + each((h) => `${h} | CHANGED | rc=0 >>\n${stdout.replace(/\n+$/, '')}\n`);
+    default: return out;
+  }
 }

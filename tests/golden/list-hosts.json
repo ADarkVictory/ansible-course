@@ -1,0 +1,154 @@
+[
+ {
+  "pattern": "all",
+  "output": "  hosts (3):\n    web1\n    web2\n    db1\n"
+ },
+ {
+  "pattern": "*",
+  "output": "  hosts (3):\n    web1\n    web2\n    db1\n"
+ },
+ {
+  "pattern": "web",
+  "output": "  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "web:&prod",
+  "output": "  hosts (1):\n    web1\n"
+ },
+ {
+  "pattern": "web:!db",
+  "output": "  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "web1:web2",
+  "output": "  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "web2:web1",
+  "output": "  hosts (2):\n    web2\n    web1\n"
+ },
+ {
+  "pattern": "db:web",
+  "output": "  hosts (3):\n    db1\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "prod:!web1",
+  "output": "  hosts (1):\n    db1\n"
+ },
+ {
+  "pattern": "web,db",
+  "output": "  hosts (3):\n    web1\n    web2\n    db1\n"
+ },
+ {
+  "pattern": "prod:&web:!staging",
+  "output": "  hosts (1):\n    web1\n"
+ },
+ {
+  "pattern": "db1",
+  "output": "  hosts (1):\n    db1\n"
+ },
+ {
+  "pattern": "nosuch",
+  "output": "[WARNING]: Could not match supplied host pattern, ignoring: nosuch\n[WARNING]: No hosts matched, nothing to do\n  hosts (0):\n"
+ },
+ {
+  "pattern": "web:nosuch",
+  "output": "[WARNING]: Could not match supplied host pattern, ignoring: nosuch\n  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "web:&nosuch",
+  "output": "[WARNING]: Could not match supplied host pattern, ignoring: nosuch\n[WARNING]: No hosts matched, nothing to do\n  hosts (0):\n"
+ },
+ {
+  "pattern": "nosuch:web",
+  "output": "[WARNING]: Could not match supplied host pattern, ignoring: nosuch\n  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "!db",
+  "output": "  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "&prod",
+  "output": "  hosts (2):\n    web1\n    db1\n"
+ },
+ {
+  "pattern": "web:!prod",
+  "output": "  hosts (1):\n    web2\n"
+ },
+ {
+  "pattern": "db:web1:web",
+  "output": "  hosts (3):\n    db1\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "prod:staging",
+  "output": "  hosts (3):\n    web1\n    db1\n    web2\n"
+ },
+ {
+  "pattern": "ungrouped",
+  "output": "[WARNING]: No hosts matched, nothing to do\n  hosts (0):\n"
+ },
+ {
+  "pattern": "localhost",
+  "output": "  hosts (1):\n    localhost\n"
+ },
+ {
+  "pattern": "web1,nosuch",
+  "output": "[WARNING]: Could not match supplied host pattern, ignoring: nosuch\n  hosts (1):\n    web1\n"
+ },
+ {
+  "pattern": "web:!nosuch",
+  "output": "[WARNING]: Could not match supplied host pattern, ignoring: nosuch\n  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "web1:&web",
+  "output": "  hosts (1):\n    web1\n"
+ },
+ {
+  "pattern": "web:&prod:&db",
+  "output": "[WARNING]: No hosts matched, nothing to do\n  hosts (0):\n"
+ },
+ {
+  "pattern": "all:!web1",
+  "output": "  hosts (2):\n    web2\n    db1\n"
+ },
+ {
+  "pattern": "*:!db",
+  "output": "  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "web,db:!db1",
+  "output": "[WARNING]: Could not match supplied host pattern, ignoring: db:!db1\n  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "web;db",
+  "output": "[WARNING]: Could not match supplied host pattern, ignoring: web;db\n[WARNING]: No hosts matched, nothing to do\n  hosts (0):\n"
+ },
+ {
+  "pattern": "web2:web2",
+  "output": "  hosts (1):\n    web2\n"
+ },
+ {
+  "pattern": "web*",
+  "output": "  hosts (2):\n    web1\n    web2\n"
+ },
+ {
+  "pattern": "*1",
+  "output": "  hosts (2):\n    web1\n    db1\n"
+ },
+ {
+  "pattern": "*b*",
+  "output": "  hosts (3):\n    web1\n    web2\n    db1\n"
+ },
+ {
+  "pattern": "w?b1",
+  "output": "  hosts (1):\n    web1\n"
+ },
+ {
+  "pattern": "db*:web1",
+  "output": "  hosts (2):\n    db1\n    web1\n"
+ },
+ {
+  "pattern": "web:prod:&staging",
+  "output": "  hosts (1):\n    web2\n"
+ }
+]

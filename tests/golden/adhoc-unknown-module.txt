@@ -1,0 +1,22 @@
+[ERROR]: Task failed: Cannot resolve 'ansible.builtin.serivce' to an action or module.
+
+Task failed.
+Origin: <adhoc 'ansible.builtin.serivce' task>
+
+{'action': 'ansible.builtin.serivce', 'args': {}, 'timeout': 0, 'async_val': 0, 'poll': 15}
+
+<<< caused by >>>
+
+Cannot resolve 'ansible.builtin.serivce' to an action or module.
+Origin: <CLI option '-m'>
+
+ansible.builtin.serivce
+
+web1 | FAILED! => {
+    "changed": false,
+    "msg": "Task failed: Cannot resolve 'ansible.builtin.serivce' to an action or module."
+}
+web2 | FAILED! => {
+    "changed": false,
+    "msg": "Task failed: Cannot resolve 'ansible.builtin.serivce' to an action or module."
+}

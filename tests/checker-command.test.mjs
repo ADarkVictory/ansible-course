@@ -1,0 +1,177 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import * as yaml from '../vendor/js-yaml.mjs';
+import { checkChoice, checkCommand, parseCommand } from '../checker.js';
+import { renderAdhoc } from '../output.js';
+
+const read = (p) => readFileSync(new URL(p, import.meta.url), 'utf8');
+const registry = yaml.load(read('../modules.yaml'));
+const golden = (n) => read(`./golden/${n}.txt`);
+const web = { web: ['web1', 'web2'] }; // tools/fixtures/inventory.ini
+const multi = { web: ['web1', 'web2'], db: ['db1'], prod: ['web1', 'db1'], staging: ['web2'] }; // tools/fixtures/inventory-multi.ini
+const ex = (checks, extra = {}) => ({ id: 'x', type: 'command', inventory: multi, checks, ...extra });
+const run = (line, extra, checks = []) => checkCommand(ex(checks, extra), line, registry);
+const pingCheck = { program: 'ansible', pattern: 'web', module: 'ansible.builtin.ping', hint: 'Ping the web group.' };
+
+test('ansible web -m ping and -m ansible.builtin.ping both pass the check; output is the real ping run', () => {
+  for (const line of ['ansible web -m ping', 'ansible web -m ansible.builtin.ping']) {
+    const r = checkCommand({ ...ex([pingCheck]), inventory: web }, line, registry);
+    assert.deepEqual(r, { ok: true, output: golden('adhoc-ping') });
+  }
+});
+
+test('a check may name the module by its short name; option order and attached values do not matter', () => {
+  for (const line of ['ansible -m ping web', 'ansible web -mping', 'ansible web -m=ping', 'ansible web --module-name=ping', 'ansible web -m command -m ping']) {
+    assert.equal(run(line, {}, [{ module: 'ping', pattern: 'web' }]).ok, true, line);
+  }
+});
+
+test('-a "name=nginx state=present" parses into args; aliases become the canonical name; flags are long names', () => {
+  const c = parseCommand('ansible web -m dnf -a "pkg=nginx state=present" -b -u root -i inventory.ini -vv', registry);
+  assert.deepEqual(c.args, { name: 'nginx', state: 'present' });
+  assert.equal(c.module, 'ansible.builtin.dnf');
+  assert.deepEqual(c.flags, { become: true, user: 'root', inventory: ['inventory.ini'], verbose: 2 });
+  assert.equal(c.pattern, 'web');
+  assert.equal(c.program, 'ansible');
+});
+
+test('checks on args and flags are partial matches; the first failing check gives its hint and 1-based index', () => {
+  const checks = [
+    { module: 'dnf', args: { name: 'nginx', state: 'present' }, hint: 'Install nginx with dnf.' },
+    { flags: { become: true }, hint: 'Installing packages needs root: add -b.' },
+  ];
+  assert.equal(run('ansible web -m dnf -a "name=nginx state=present" -b', {}, checks).ok, true);
+  const r = run('ansible web -m dnf -a "name=nginx state=present"', {}, checks);
+  assert.equal(r.ok, false);
+  assert.equal(r.hint, 'Installing packages needs root: add -b.');
+  assert.equal(r.failedCheck, 2);
+  assert.equal(run('ansible web -m dnf -a "name=httpd state=present" -b', {}, checks).failedCheck, 1);
+});
+
+test('quoted arguments with spaces survive; backslashes escape; single quotes are literal', () => {
+  const args = (line, m = 'debug') => parseCommand(`ansible web -m ${m} ${line}`, registry).args;
+  assert.deepEqual(args(`-a 'msg="hello world"'`), { msg: 'hello world' });
+  assert.deepEqual(args(`-a "msg='a b'"`), { msg: 'a b' });
+  assert.deepEqual(args('-a "msg=\\"hi there\\""'), { msg: 'hi there' });
+  assert.deepEqual(args('-a echo\\ hello\\ world', 'command'), { _raw_params: 'echo hello world' });
+  assert.deepEqual(args('-a "echo hello world"', 'command'), { _raw_params: 'echo hello world' });
+  assert.deepEqual(args(`-a ''`, 'command'), {});
+  assert.deepEqual(args('-a "a=1" -a "b=2"', 'debug'), { b: '2' });
+});
+
+test('-a accepts a JSON mapping, like the real option', () => {
+  assert.equal(run(`ansible web -m ping -a '{"data": "a b"}'`).output, golden('adhoc-ping-data'));
+});
+
+test('unknown module: the real ad-hoc error, shown with no hint even though it also fails the module check', () => {
+  const r = run('ansible web -m ansible.builtin.serivce', {}, [{ module: 'service', hint: 'x' }]);
+  assert.deepEqual(r, { ok: false, output: golden('adhoc-unknown-module') });
+});
+
+test('real ad-hoc failures: unsupported parameter (short and FQCN), raw params, no argument for command', () => {
+  assert.equal(run('ansible web -m ping -a bogus=x').output, golden('adhoc-unsupported-param'));
+  assert.equal(run('ansible web -m ansible.builtin.ping -a bogus=x').output, golden('adhoc-unsupported-param-fqcn'));
+  assert.equal(run('ansible web -m ping -a hello').output, golden('adhoc-raw-params'));
+  assert.equal(run('ansible web').output, golden('adhoc-no-command-arg'));
+  assert.equal(run('ansible web -m command -a ""').output, golden('adhoc-no-command-arg'));
+  assert.equal(run('ansible nosuch -m shell').output, golden('adhoc-no-hosts-no-arg'));
+  for (const line of ['ansible web -m ping -a bogus=x', 'ansible web -m ping -a hello', 'ansible web']) {
+    assert.equal(run(line, {}, [{ pattern: 'web' }]).ok, false, `${line} fails in real Ansible, so it is never correct`);
+  }
+});
+
+test('command and shell results use the exercise stdout; empty stdout prints a blank line', () => {
+  assert.equal(run('ansible web -m command -a "echo hello"', { stdout: 'hello' }).output, golden('adhoc-command'));
+  assert.equal(run('ansible web -m shell -a "echo hi; echo there"', { stdout: 'hi\nthere\n' }).output, golden('adhoc-shell'));
+  assert.equal(run('ansible web -m ansible.builtin.command -a true').output, golden('adhoc-command-empty'));
+});
+
+test('ping data parameter', () => {
+  assert.equal(run('ansible web -m ping -a \'data="a b"\'').output, golden('adhoc-ping-data'));
+});
+
+test('pattern matching no host: the real warnings; the pattern check still gives its hint', () => {
+  const r = run('ansible nosuch -m ping', {}, [pingCheck]);
+  assert.deepEqual(r, { ok: false, output: golden('adhoc-no-hosts'), hint: 'Ping the web group.', failedCheck: 1 });
+});
+
+test('--limit: intersects with the pattern; empty and unmatched limits are the real error', () => {
+  assert.equal(run("ansible 'web:db' -m ping --limit prod").output, golden('adhoc-limit'));
+  assert.equal(run('ansible web -m ping -l db').output, golden('adhoc-limit-empty'));
+  assert.equal(run('ansible nosuch -m ping --limit nosuch').output, golden('adhoc-limit-unmatched'));
+  assert.equal(run('ansible web -m ping --limit=db1 -l web').output, run('ansible web -m ping').output); // the last -l wins
+});
+
+test('--list-hosts prints what real ansible lists, for every pattern captured from it', () => {
+  for (const { pattern, output } of JSON.parse(read('./golden/list-hosts.json'))) {
+    assert.equal(run(`ansible '${pattern}' --list-hosts`).output, output, pattern);
+  }
+});
+
+test('renderAdhoc takes parseCommand(...) and the inventory', () => {
+  assert.equal(renderAdhoc(parseCommand('ansible web -m ping', registry), web), golden('adhoc-ping'));
+});
+
+test('exercise output replaces the generated output on success; failures still show the real run', () => {
+  const output = 'web1 | CHANGED => {"x": 1}\n';
+  assert.deepEqual(run('ansible web -m ping', { output }, [{ pattern: 'web' }]), { ok: true, output });
+  assert.equal(run('ansible db -m ping', { output }, [{ pattern: 'web', hint: 'h' }]).output.startsWith('db1 | SUCCESS'), true);
+});
+
+test('options the simulator cannot show (-v, -o, -C, -K, ...): no invented output unless the exercise supplies it', () => {
+  assert.deepEqual(run('ansible web -m ping -vvv', {}, [{ pattern: 'db', hint: 'h' }]), { ok: false, output: '', hint: 'h', failedCheck: 1 });
+  assert.deepEqual(run('ansible web -m ping -C', { output: 'shown\n' }, [{ pattern: 'web' }]), { ok: true, output: 'shown\n' });
+});
+
+test('a program other than ansible is not part of this exercise', () => {
+  const r = run('ansible-playbook site.yml', {}, [{ program: 'ansible-playbook', hint: 'h' }]);
+  assert.equal(r.ok, false);
+  assert.equal(r.output, '');
+  assert.match(r.hint, /ansible-playbook/);
+  assert.match(r.hint, /not part of this exercise/);
+});
+
+test('input mistakes give a hint and no invented Ansible output', () => {
+  for (const [line, hint] of [
+    ['', /Type a command/],
+    ['   ', /Type a command/],
+    ['ansible web -m "ping', /quote/],
+    ["ansible web -m ping -a 'x", /quote/],
+    ['ansible web -m ping -a "msg=“hi”"', /curly quotes; use straight quotes/],
+    ['ansible web -m ‘ping’', /curly quotes; use straight quotes/],
+    ['ansible -m ping', /host pattern/],
+    ['ansible web db -m ping', /one host pattern/],
+    ['ansible web -m ping --bogus', /--bogus/],
+    ['ansible web -m ping -x', /-x/],
+    ['ansible web -m', /-m needs a value/],
+    ['ansible web -m ping --limit', /--limit needs a value/],
+    ['ansible web --mod=ping', /--mod/], // ansible does not abbreviate long options
+    ['ansible web -m ping -a "msg=\\"x"', /quote/],
+  ]) {
+    const r = run(line, {}, [{ pattern: 'web', hint: 'check hint' }]);
+    assert.equal(r.ok, false, line);
+    assert.equal(r.output, '', line);
+    assert.match(r.hint, hint, line);
+  }
+});
+
+test('an unknown key in a check is a content bug, not a silent pass', () => {
+  assert.throws(() => run('ansible web -m ping', {}, [{ modul: 'ping' }]), /unknown check/);
+});
+
+test('flags: -bK style clusters, repeated and appended options', () => {
+  const c = parseCommand('ansible web -m ping -bk -e a=1 --extra-vars b=2 --limit web1 --become-user=app', registry);
+  assert.deepEqual(c.flags, { become: true, 'ask-pass': true, 'extra-vars': ['a=1', 'b=2'], limit: 'web1', 'become-user': 'app' });
+});
+
+test('checkChoice returns whether the option is correct, and its why', () => {
+  const choice = {
+    id: 'c', type: 'choice', question: 'q',
+    options: [{ text: 'a', correct: false, why: 'Not a.' }, { text: 'b', correct: true, why: 'Because b.' }, { text: 'c', why: 'Nor c.' }],
+  };
+  assert.deepEqual(checkChoice(choice, 0), { ok: false, why: 'Not a.' });
+  assert.deepEqual(checkChoice(choice, 1), { ok: true, why: 'Because b.' });
+  assert.deepEqual(checkChoice(choice, 2), { ok: false, why: 'Nor c.' });
+  assert.deepEqual(checkChoice(choice, 7), { ok: false, why: '' });
+});

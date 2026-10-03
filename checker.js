@@ -1,7 +1,7 @@
 // Pure ES module, no DOM: the browser and Node run the same code.
 // parsePlaybook turns playbook text into plays, or into the exact error ansible-core 2.21.4 prints for it.
 import * as yaml from './vendor/js-yaml.mjs';
-import { render } from './output.js'; // output.js imports format/excerpt back; both only call each other at run time, so the cycle is harmless.
+import { render, renderAdhoc } from './output.js'; // output.js imports format/excerpt back; both only call each other at run time, so the cycle is harmless.
 
 const PATH = '/home/student/playbook.yml';
 const TAB_HINT = 'Replace tabs with spaces.';
@@ -95,6 +95,151 @@ function same(a, want) {
   if (Array.isArray(a) && Array.isArray(want)) return a.length === want.length && a.every((x, i) => same(x, want[i]));
   if (isMap(a) && isMap(want)) return Object.keys(a).length === Object.keys(want).length && has(a, want);
   return a === want;
+}
+
+// ---- Command and choice exercises ------------------------------------------------------------------------------------
+// ansible's options (`ansible --help`), as `long|alias|s` names: the first is the long name that `flags` uses. A trailing `=` takes a
+// value (`=+`: every occurrence is kept, otherwise the last wins), `*` counts occurrences. Long options are not abbreviated.
+const OPTIONS = [
+  'become|b', 'become-method=', 'become-user=', 'ask-become-pass|K', 'become-password-file|become-pass-file=', 'inventory|inventory-file|i=+',
+  'list-hosts', 'limit|l=', 'flush-cache', 'poll|P=', 'background|B=', 'one-line|o', 'tree|t=', 'private-key|key-file=', 'user|u=',
+  'connection|c=', 'timeout|T=', 'ssh-common-args=', 'sftp-extra-args=', 'scp-extra-args=', 'ssh-extra-args=', 'ask-pass|k',
+  'connection-password-file|conn-pass-file=', 'check|C', 'diff|D', 'extra-vars|e=+', 'vault-id=+', 'ask-vault-password|ask-vault-pass|J',
+  'vault-password-file|vault-pass-file=+', 'forks|f=', 'module-path|M=+', 'playbook-dir=', 'task-timeout=', 'args|a=', 'module-name|m=',
+  'verbose|v*', 'version', 'help|h',
+];
+const BY_FLAG = new Map(OPTIONS.flatMap((spec) => {
+  const [, names, kind] = /^([^=*]+)(.*)$/.exec(spec);
+  const list = names.split('|');
+  return list.map((n) => [n.length === 1 ? `-${n}` : `--${n}`, { name: list[0], kind }]);
+}));
+// Options that change what ansible prints (verbosity, prompts, check mode, ...) beyond what renderAdhoc shows; with one of them the
+// simulator shows no output of its own, only the exercise's `output` on success.
+const UNSIMULATED = new Set(['verbose', 'one-line', 'check', 'diff', 'tree', 'background', 'poll', 'ask-become-pass', 'ask-pass',
+  'ask-vault-password', 'version', 'help', 'task-timeout']);
+
+// A shell line's words: whitespace separates them; quotes and backslashes only (no $, globs, pipes). undefined: a quote is left open.
+function shellWords(line) {
+  const words = [];
+  let w = null, q = null;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q === "'") { if (c === "'") q = null; else w += c; }
+    else if (c === '\\' && (!q || '"\\$`'.includes(line[i + 1] ?? ''))) w = (w ?? '') + (line[++i] ?? '\\');
+    else if (c === q) q = null;
+    else if (!q && (c === '"' || c === "'")) { q = c; w ??= ''; }
+    else if (!q && /\s/.test(c)) { if (w !== null) words.push(w); w = null; }
+    else w = (w ?? '') + c;
+  }
+  if (q) return undefined;
+  if (w !== null) words.push(w);
+  return words;
+}
+
+// argparse's reading of the words after `ansible`: { flags, pos } or { error } (a hint, in the course's words).
+function parseArgv(argv) {
+  const flags = {}, pos = [];
+  const looksLikeOption = (w) => w.length > 1 && w[0] === '-' && !/^-\d/.test(w) && !w.includes(' ');
+  const set = ({ name, kind }, value) => {
+    if (kind === '*') flags[name] = (flags[name] ?? 0) + 1;
+    else if (kind === '=+') (flags[name] ??= []).push(value);
+    else flags[name] = kind ? value : true;
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const w = argv[i];
+    if (w === '--') { pos.push(...argv.slice(i + 1)); break; }
+    if (!looksLikeOption(w)) { pos.push(w); continue; }
+    // `--limit x`, `--limit=x`; for short options `-l x`, `-lx`, `-l=x` and clusters such as `-bK` or `-vvv`.
+    for (let j = w.startsWith('--') ? 0 : 1; j < w.length; j++) {
+      const eq = w.indexOf('=');
+      const flag = j === 0 ? (eq < 0 ? w : w.slice(0, eq)) : `-${w[j]}`;
+      const opt = BY_FLAG.get(flag);
+      if (!opt) return { error: `ansible does not know the option ${flag}.` };
+      if (!opt.kind || opt.kind === '*') {
+        if (j === 0 && eq >= 0) return { error: `${flag} does not take a value.` };
+        set(opt);
+        if (j === 0) break;
+        continue;
+      }
+      let value = j === 0 ? (eq < 0 ? undefined : w.slice(eq + 1)) : w.slice(j + 1).replace(/^=/, '') || undefined;
+      value ??= looksLikeOption(argv[i + 1] ?? '-') ? undefined : argv[++i];
+      if (value === undefined) return { error: `${flag} needs a value.` };
+      set(opt, value);
+      break;
+    }
+  }
+  if (!pos.length) return { error: 'ansible needs a host pattern, for example: ansible web -m ping' };
+  if (pos.length > 1) return { error: 'ansible takes one host pattern; quote it if it contains spaces or special characters.' };
+  return { flags, pos };
+}
+
+/**
+ * A learner's command line as the checks and renderAdhoc see it.
+ * @returns { hint } for a line that cannot be run (the hint says why), else
+ *   { program, pattern, module, args, flags } for the checks: module is the resolved name (short names are ansible.builtin.*, `command`
+ *   when there is no -m), args the canonical parameters of -a, flags the other options by long name (true, a string, an array for
+ *   options that repeat, a count for -v);
+ *   plus what renderAdhoc prints from: mod (-m as typed), known, typedArgs (-a as typed), noArg, rawParams, unsupported.
+ *   Only `ansible` lines are read; other programs arrive with the lessons that need their output.
+ */
+export function parseCommand(line, registry) {
+  if (CURLY.test(line)) return { hint: CURLY_HINT };
+  const words = shellWords(String(line));
+  if (!words) return { hint: 'Close the quote you opened.' };
+  if (!words.length) return { hint: 'Type a command.' };
+  const [program, ...argv] = words;
+  if (program !== 'ansible') return { program, hint: `"${program}" is not part of this exercise; use the ansible command.` };
+  const { flags, pos, error } = parseArgv(argv);
+  if (error) return { program, hint: error };
+  const { 'module-name': mod = 'command', args: text = '', ...rest } = flags;
+  const module = mod.includes('.') ? mod : `ansible.builtin.${mod}`;
+  const spec = registry[module];
+  let typed = {};
+  if (text) {
+    let json;
+    try { json = JSON.parse(text); } catch { /* not JSON: k=v */ }
+    typed = isMap(json) ? json : parseKv(text, spec?.freeform);
+    if (!typed) return { program, hint: 'The quotes in -a do not balance: close every quote you open.' };
+  }
+  const rawParams = Boolean(spec && '_raw_params' in typed && !spec.freeform);
+  return {
+    program, pattern: pos[0], module, args: spec ? normalise(spec, { ...typed }) : { ...typed }, flags: rest,
+    mod, known: Boolean(spec), typedArgs: typed, rawParams,
+    noArg: !text && (module === 'ansible.builtin.command' || module === 'ansible.builtin.shell'),
+    unsupported: spec && !rawParams ? unsupportedMsg(spec, mod, typed) : undefined,
+  };
+}
+
+/**
+ * Decides whether a learner's command meets a `command` exercise.
+ * @param exercise { inventory, checks: [{ program?, pattern?, module?, args?, flags?, hint? }], stdout?, output? }
+ *                 a check passes when every key it names matches (args and flags: the keys it names); `stdout` is what a command
+ *                 or shell module prints; `output` replaces the generated output on success (modules the simulator cannot run).
+ * @returns { ok, output, hint?, failedCheck? } failedCheck is the 1-based index into exercise.checks.
+ */
+export function checkCommand(exercise, line, registry) {
+  const cmd = parseCommand(line, registry);
+  const fail = (output, hint, failedCheck) => ({ ok: false, output, ...(hint && { hint }), ...(failedCheck && { failedCheck }) });
+  if (cmd.hint) return fail('', cmd.hint);
+  const shown = Object.keys(cmd.flags).some((f) => UNSIMULATED.has(f)) ? '' : renderAdhoc(cmd, exercise.inventory, { stdout: exercise.stdout });
+  // A command real Ansible stops on is never correct, and a check's hint would only mislead: the learner needs that error first.
+  if (/^\[ERROR\]: /m.test(shown)) return fail(shown);
+  const checks = exercise.checks ?? [];
+  const canonical = (m) => m.includes('.') ? m : `ansible.builtin.${m}`;
+  const i = checks.findIndex((c) => {
+    const bad = Object.keys(c).find((k) => !['program', 'pattern', 'module', 'args', 'flags', 'hint'].includes(k));
+    if (bad) throw new Error(`unknown check ${bad} in exercise ${exercise.id}: ${JSON.stringify(c)}`);
+    return !((c.program ?? cmd.program) === cmd.program && (c.pattern ?? cmd.pattern) === cmd.pattern
+      && canonical(c.module ?? cmd.module) === cmd.module && has(cmd.args, c.args) && has(cmd.flags, c.flags));
+  });
+  if (i >= 0) return fail(shown, checks[i].hint, i + 1);
+  return { ok: true, output: exercise.output ?? shown };
+}
+
+/** The chosen option's verdict and explanation: { ok, why }. */
+export function checkChoice(exercise, index) {
+  const option = exercise.options[index];
+  return { ok: option?.correct === true, why: option?.why ?? '' };
 }
 
 function parse(src, registry, kw) {
@@ -243,20 +388,28 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
     if (/^\{\{[\s\S]*\}\}$/.test(args._raw_params)) delete args._raw_params;
     else task.rawParams = child(tnode, key)?.key ?? tnode; // the action key's node; the caller turns it into { line, col }
   }
-  // Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
-  // The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
-  if (!task.rawParams) {
-    const [, names, aliases = ''] = /^(.*?)(?: \((.*)\))?\.$/.exec(spec.supported);
-    const legal = new Set([...spec.params, ...Object.keys(spec.aliases), ...`${names}, ${aliases}`.split(', ')]);
-    const bad = Object.keys(args).filter((k) => !legal.has(k)).sort();
-    const ran = spec.reports_as[mod.includes('.') ? 'fqcn' : 'short'];
-    if (bad.length) task.unsupported = `Unsupported parameters for (${ran}) module: ${bad.join(', ')}. Supported parameters include: ${spec.supported}`;
-  }
-  // Aliases are accepted by Ansible; checks compare canonical names.
+  const bad = !task.rawParams && unsupportedMsg(spec, mod, args);
+  if (bad) task.unsupported = bad;
+  normalise(spec, args);
+  return task;
+}
+
+// Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
+// The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
+function unsupportedMsg(spec, mod, args) {
+  const [, names, aliases = ''] = /^(.*?)(?: \((.*)\))?\.$/.exec(spec.supported);
+  const legal = new Set([...spec.params, ...Object.keys(spec.aliases), ...`${names}, ${aliases}`.split(', ')]);
+  const bad = Object.keys(args).filter((k) => !legal.has(k)).sort();
+  const ran = spec.reports_as[mod.includes('.') ? 'fqcn' : 'short'];
+  if (bad.length) return `Unsupported parameters for (${ran}) module: ${bad.join(', ')}. Supported parameters include: ${spec.supported}`;
+}
+
+// Aliases are accepted by Ansible; checks compare canonical names.
+function normalise(spec, args) {
   for (const [alias, name] of Object.entries(spec.aliases)) {
     if (alias in args) { args[name] ??= args[alias]; delete args[alias]; }
   }
-  return task;
+  return args;
 }
 
 // ---- Free-form k=v arguments (ansible/parsing/splitter.py: split_args, parse_kv, join_args) ------------------------
@@ -529,7 +682,7 @@ function pyType(v) {
 
 // ponytail: floats that are whole numbers print as ints (js-yaml drops the ".0"), int keys print quoted (JS object keys are
 // strings), and non-printable escapes are not reproduced.
-function pyRepr(v) {
+export function pyRepr(v) {
   if (v === null || v === undefined) return 'None';
   if (typeof v === 'boolean') return v ? 'True' : 'False';
   if (typeof v === 'number') return String(v);

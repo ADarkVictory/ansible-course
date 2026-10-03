@@ -1,0 +1,8 @@
+web1 | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}
+db1 | SUCCESS => {
+    "changed": false,
+    "ping": "pong"
+}

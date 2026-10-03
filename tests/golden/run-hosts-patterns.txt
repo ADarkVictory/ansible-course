@@ -1,0 +1,30 @@
+[WARNING]: Could not match supplied host pattern, ignoring: nosuch
+
+PLAY [nosuch] ******************************************************************
+skipping: no hosts matched
+
+PLAY [web:nosuch] **************************************************************
+
+TASK [ping] ********************************************************************
+ok: [web1]
+ok: [web2]
+
+PLAY [nosuch] ******************************************************************
+skipping: no hosts matched
+[WARNING]: Could not match supplied host pattern, ignoring: web:!nosuch
+
+PLAY [web:!nosuch,db] **********************************************************
+
+TASK [ping] ********************************************************************
+ok: [db1]
+
+PLAY [web:&prod] ***************************************************************
+
+TASK [ping] ********************************************************************
+ok: [web1]
+
+PLAY RECAP *********************************************************************
+db1                        : ok=1    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+web1                       : ok=2    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+web2                       : ok=1    changed=0    unreachable=0    failed=0    skipped=0    rescued=0    ignored=0   
+

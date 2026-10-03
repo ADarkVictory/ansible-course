@@ -3,6 +3,9 @@
 # Each golden is what a learner sees after, from /home/student:
 #   ansible-playbook -i tools/fixtures/inventory.ini /home/student/playbook.yml   (every fixture but adhoc-ping)
 #   ansible web -i tools/fixtures/inventory.ini -m ansible.builtin.ping           (adhoc-ping)
+#   ansible-playbook -i tools/fixtures/inventory-multi.ini playbook.yml           (run-hosts-patterns)
+#   ansible <args> -i tools/fixtures/inventory-multi.ini                          (adhoc-*, see the adhoc calls below)
+#   list-hosts.json: ansible <pattern> --list-hosts over inventory-multi.ini      (tools/gen-hosts.py)
 # ANSIBLE_FORKS=1 keeps host order deterministic (web1 before web2); default forks=5 races.
 # <name>-second is <name>.yml run a second time with no cleanup in between.
 # Needs: uv, python3.13, and a writable /home/student (CI: sudo mkdir -p /home/student && sudo chown $USER /home/student).
@@ -33,6 +36,27 @@ for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param 
     ansible-playbook -i "$inv" /home/student/playbook.yml > "$out/$f.txt" 2>&1
   fi
 done
+
+# Multi-group inventory (web1 web2 | db1 | prod = web1 db1 | staging = web2): host patterns, ad-hoc runs.
+invm="$root/tools/fixtures/inventory-multi.ini"
+cp "$root/tools/fixtures/hosts-patterns.yml" /home/student/playbook.yml
+ansible-playbook -i "$invm" /home/student/playbook.yml > "$out/run-hosts-patterns.txt" 2>&1 < /dev/null
 rm -f /home/student/playbook.yml
+adhoc() { f=$1; shift; ansible "$@" -i "$invm" > "$out/$f.txt" 2>&1 < /dev/null; }
+adhoc adhoc-command web -m command -a 'echo hello'
+adhoc adhoc-command-empty web -m ansible.builtin.command -a true
+adhoc adhoc-shell web -m shell -a 'echo hi; echo there'
+adhoc adhoc-ping-data web -m ping -a 'data="a b"'
+adhoc adhoc-unknown-module web -m ansible.builtin.serivce
+adhoc adhoc-unsupported-param web -m ping -a bogus=x
+adhoc adhoc-unsupported-param-fqcn web -m ansible.builtin.ping -a bogus=x
+adhoc adhoc-raw-params web -m ping -a hello
+adhoc adhoc-no-hosts nosuch -m ping
+adhoc adhoc-no-command-arg web
+adhoc adhoc-no-hosts-no-arg nosuch -m shell
+adhoc adhoc-limit 'web:db' -m ping --limit prod
+adhoc adhoc-limit-empty web -m ping --limit db
+adhoc adhoc-limit-unmatched nosuch -m ping --limit nosuch
+"$root/.venv/bin/python" "$root/tools/gen-hosts.py" "$invm" > "$out/list-hosts.json"
 "$root/.venv/bin/python" "$root/tools/gen-kv.py" > "$out/kv.json"
 exit 0
