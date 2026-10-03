@@ -1,0 +1,420 @@
+- id: checkpoint-1
+  type: choice
+  question: "Last night a colleague ran `ansible prod -b -m dnf -a 'name=chrony state=present'`. `web2` was powered off and reported `UNREACHABLE!`; every other prod host reported `CHANGED`. This morning `web2` is back, and she runs the same line again. What does it report?"
+  options:
+    - text: "`web2` reports `CHANGED`; every other host reports `SUCCESS`, with `\"changed\": false`"
+      correct: true
+      why: Nothing reached `web2` while it was off; only a new run configures it. The dnf module checks before it acts, so the hosts that already have chrony change nothing and report `SUCCESS`, as `ping` does.
+    - text: Every host reports `CHANGED`, because the line installs chrony again on each of them
+      correct: false
+      why: "That is what `shell: dnf install -y chrony` would report. The dnf module checks which packages are installed and changes nothing where chrony is already there. Revisit lesson 5, Use a module, not shell."
+    - text: "`web2` reports `SUCCESS`, because it fetched the change from the control node when it booted"
+      correct: false
+      why: Nothing on `web2` fetches anything. Ansible has no agent and pushes each run, so `web2` gets chrony only now. Revisit lesson 1, Push, not pull.
+    - text: Only `web2` is contacted, because Ansible skips the hosts that succeeded last night
+      correct: false
+      why: Ansible keeps no record of earlier runs. It connects to every host the pattern matches and checks each one's real state. Revisit lesson 1, Idempotency.
+
+- id: checkpoint-2
+  type: choice
+  question: "The project's `ansible.cfg` sets `remote_user = deploy` under `[defaults]` and `become = True` under `[privilege_escalation]`. From the repository root you run `ansible db -a whoami`, without `-b`. What does each host print after `>>`?"
+  options:
+    - text: "`deploy`, because an ad-hoc command needs `-b` to become another user"
+      correct: false
+      why: "`-b` turns become on from the command line, but this `ansible.cfg` has already turned it on. Revisit lesson 4, Running as root: -b."
+    - text: "`root`"
+      correct: true
+      why: "`ansible` reads the same `ansible.cfg` as `ansible-playbook`. It logs in as `deploy`, then runs `whoami` through `sudo` as `root`, the default `become_user`."
+    - text: "`deploy`, because `ansible.cfg` settings apply only to playbooks"
+      correct: false
+      why: Every Ansible command reads `ansible.cfg`; lesson 4's commands needed no `-i` because the inventory was set there. Revisit lesson 3, A project ansible.cfg.
+    - text: "`deploy`, because `become` belongs under `[defaults]`, so this file never turns it on"
+      correct: false
+      why: "`become` belongs under `[privilege_escalation]`, where this file has it. Under `[defaults]` it would be ignored without a warning. Revisit lesson 3, Privilege escalation: become."
+
+- id: checkpoint-3
+  type: choice
+  question: "A colleague wrote this inventory, and `ansible-inventory --graph` printed no warning. To restart the app in production without touching the databases, she ran `ansible 'prod:!db' -b -m systemd_service -a 'name=app state=restarted'`. Which hosts restarted the app?"
+  code: |
+    all:
+      children:
+        web:
+          hosts:
+            web1:
+            web2:
+        db:
+          db1:
+          db2:
+        prod:
+          hosts:
+            web1:
+            db1:
+  options:
+    - text: "`web1` only, as she meant"
+      correct: false
+      why: "`db1:` and `db2:` sit directly under `db:`, without `hosts:`. Ansible skips them without a warning, so `db` is an empty group and `!db` removes nothing; `--graph` showed `@db:` with no hosts. Revisit lesson 2, When Ansible cannot read the file."
+    - text: "`web1` and `db1`"
+      correct: true
+      why: "`db` holds no hosts, because `db1:` and `db2:` need a `hosts:` key above them. `prod` lists `web1` and `db1`, and `!db` takes nothing away. `--list-hosts` on the same line would have shown `db1` before anything restarted."
+    - text: None, because Ansible refuses a pattern that names an empty group
+      correct: false
+      why: An empty group is a valid group that matches no hosts. Ansible ran on what the pattern left, `web1` and `db1`. Revisit lesson 4, Host patterns.
+    - text: "None, because bash replaced `!db` with a command from her history before Ansible saw it"
+      correct: false
+      why: Inside single quotes bash changes nothing, so Ansible received `prod:!db`. Revisit lesson 4, Quote patterns in single quotes.
+
+- id: checkpoint-4
+  type: choice
+  question: "Same commit, same command, both run from the repository root. On your laptop, `ansible 'web:&prod' --list-hosts` lists `web1` and `web2`; in the CI job it lists `web7`. The project's `ansible.cfg` sets `inventory = inventory.ini`. What is the likely cause?"
+  options:
+    - text: The CI runner's `~/.ansible.cfg` names another inventory, and it is read after the project file
+      correct: false
+      why: Ansible reads only the first config file it finds, here `./ansible.cfg`. No other file is read after it or merged in. Revisit lesson 3, Which file wins.
+    - text: Patterns match the address in `ansible_host`, and the CI runner resolves those addresses differently
+      correct: false
+      why: "Patterns match inventory names. `ansible_host` is only the address SSH connects to, and `--list-hosts` connects to nothing. Revisit lesson 2, Host variables inline."
+    - text: The CI shell treats `&` as a background operator and runs a different command
+      correct: false
+      why: Inside single quotes the shell passes `web:&prod` to Ansible unchanged, in CI as on your laptop. Revisit lesson 4, Quote patterns in single quotes.
+    - text: The CI job sets `ANSIBLE_INVENTORY`, which beats `inventory` in `ansible.cfg`
+      correct: true
+      why: "An environment variable is stronger than the config file. `ansible-config dump --only-changed` in the job would show `DEFAULT_HOST_LIST(env: ANSIBLE_INVENTORY)` and the file it names."
+
+- id: checkpoint-5
+  type: choice
+  question: "A playbook task uses `firewalld:`. It runs on your laptop, where you installed the `ansible` package. In CI, which installs only `ansible-core`, the run stops with `couldn't resolve module/action 'firewalld'`. Why?"
+  options:
+    - text: The managed nodes in CI lack the firewalld module and need it installed
+      correct: false
+      why: Nothing Ansible-specific is installed on managed nodes. The control node copies each module over for the task, so the control node must have it. Revisit lesson 1, Agentless, SSH and Python.
+    - text: Short names work only ad hoc; a playbook needs the FQCN
+      correct: false
+      why: Short names run in playbooks too. ansible-lint flags them, but Ansible does not refuse them, and the same task runs on your laptop. Revisit lesson 5, Short names are ambiguous.
+    - text: "`firewalld` is short for `ansible.builtin.firewalld`; writing that fixes CI"
+      correct: false
+      why: ansible-core ships no firewalld module. `ansible.builtin.firewalld` only redirects to `ansible.posix.firewalld`, so CI stops the same way. Revisit lesson 5, Short names are ambiguous.
+    - text: "`firewalld` redirects to `ansible.posix.firewalld`, and the CI runner, the control node of that run, has no `ansible.posix` collection"
+      correct: true
+      why: The module comes from the control node. The `ansible` package bundles `ansible.posix`; `ansible-core` alone does not. Install the collection in CI, and write the FQCN, `ansible.posix.firewalld`.
+
+- id: checkpoint-6
+  type: write
+  kind: inventory
+  task: |
+    Write the YAML inventory for this estate:
+
+    - Production: `web1` and `web2` (web servers), `db1` (database)
+    - Staging: `web3` (web server), `db2` (database)
+    - Development: `dev1`, one machine that runs both the web server and the database
+
+    The role groups `web` and `db` and the environment groups `prod`, `staging` and `dev` each list their hosts under their own `hosts` key. `nonprod` holds the groups `staging` and `dev`.
+  starter: |
+    all:
+      children:
+  solution: |
+    all:
+      children:
+        web:
+          hosts:
+            web1:
+            web2:
+            web3:
+            dev1:
+        db:
+          hosts:
+            db1:
+            db2:
+            dev1:
+        prod:
+          hosts:
+            web1:
+            web2:
+            db1:
+        nonprod:
+          children:
+            staging:
+              hosts:
+                web3:
+                db2:
+            dev:
+              hosts:
+                dev1:
+  checks:
+    - group: web
+      hosts: [web1, web2, web3, dev1]
+      hint: web must list exactly web1, web2, web3 and dev1 under its own hosts key.
+    - group: db
+      hosts: [db1, db2, dev1]
+      hint: db must list exactly db1, db2 and dev1. A host can be in any number of groups.
+    - group: prod
+      hosts: [web1, web2, db1]
+      hint: prod must list exactly web1, web2 and db1 under its own hosts key. A group named under children is one group across the whole file, with all its hosts; ansible-inventory --graph shows what prod really holds.
+    - group: staging
+      hosts: [web3, db2]
+      hint: staging must list exactly web3 and db2 under its own hosts key.
+    - group: dev
+      hosts: [dev1]
+      hint: dev must list dev1 under a hosts key. A host name placed directly under a group is skipped without a warning.
+    - group: nonprod
+      children: [staging, dev]
+      hint: nonprod holds the groups staging and dev, not hosts with those names. Which of a group's keys lists other groups?
+  right:
+    - |
+      web:
+        hosts:
+          web1:
+          web2:
+          web3:
+          dev1:
+      db:
+        hosts:
+          db1:
+          db2:
+          dev1:
+      prod:
+        hosts:
+          web1:
+          web2:
+          db1:
+      staging:
+        hosts:
+          web3:
+          db2:
+      dev:
+        hosts:
+          dev1:
+      nonprod:
+        children:
+          staging:
+          dev:
+    - |
+      all:
+        children:
+          prod:
+            hosts:
+              web1:
+                ansible_host: 10.0.1.11
+              web2:
+                ansible_host: 10.0.1.12
+              db1:
+                ansible_host: 10.0.1.21
+          nonprod:
+            children:
+              staging:
+                hosts:
+                  web3:
+                    ansible_host: 10.0.2.11
+                  db2:
+                    ansible_host: 10.0.2.21
+              dev:
+                hosts:
+                  dev1:
+                    ansible_host: 10.0.3.11
+          web:
+            hosts:
+              web1:
+              web2:
+              web3:
+              dev1:
+          db:
+            hosts:
+              db1:
+              db2:
+              dev1:
+  wrong:
+    # Role groups nested under each environment: web is one group, so prod gets web3 and dev1 as well.
+    - code: |
+        all:
+          children:
+            prod:
+              children:
+                web:
+                  hosts:
+                    web1:
+                    web2:
+                db:
+                  hosts:
+                    db1:
+            nonprod:
+              children:
+                staging:
+                  children:
+                    web:
+                      hosts:
+                        web3:
+                    db:
+                      hosts:
+                        db2:
+                dev:
+                  children:
+                    web:
+                      hosts:
+                        dev1:
+                    db:
+                      hosts:
+                        dev1:
+      fails: 3
+    # Lesson 2's [prod:children] shape: prod holds every web and db host.
+    - code: |
+        all:
+          children:
+            web:
+              hosts:
+                web1:
+                web2:
+                web3:
+                dev1:
+            db:
+              hosts:
+                db1:
+                db2:
+                dev1:
+            prod:
+              children:
+                web:
+                db:
+            nonprod:
+              children:
+                staging:
+                  hosts:
+                    web3:
+                    db2:
+                dev:
+                  hosts:
+                    dev1:
+      fails: 3
+    # dev1 forgotten in db.
+    - code: |
+        all:
+          children:
+            web:
+              hosts:
+                web1:
+                web2:
+                web3:
+                dev1:
+            db:
+              hosts:
+                db1:
+                db2:
+            prod:
+              hosts:
+                web1:
+                web2:
+                db1:
+            nonprod:
+              children:
+                staging:
+                  hosts:
+                    web3:
+                    db2:
+                dev:
+                  hosts:
+                    dev1:
+      fails: 2
+    # dev1 directly under dev: skipped without a warning, dev is empty.
+    - code: |
+        all:
+          children:
+            web:
+              hosts:
+                web1:
+                web2:
+                web3:
+                dev1:
+            db:
+              hosts:
+                db1:
+                db2:
+                dev1:
+            prod:
+              hosts:
+                web1:
+                web2:
+                db1:
+            nonprod:
+              children:
+                staging:
+                  hosts:
+                    web3:
+                    db2:
+                dev:
+                  dev1:
+      fails: 5
+    # nonprod lists hosts named staging and dev.
+    - code: |
+        all:
+          children:
+            web:
+              hosts:
+                web1:
+                web2:
+                web3:
+                dev1:
+            db:
+              hosts:
+                db1:
+                db2:
+                dev1:
+            prod:
+              hosts:
+                web1:
+                web2:
+                db1:
+            staging:
+              hosts:
+                web3:
+                db2:
+            dev:
+              hosts:
+                dev1:
+            nonprod:
+              hosts:
+                staging:
+                dev:
+      fails: 6
+
+- id: checkpoint-7
+  type: command
+  task: |
+    Your runbook restarts nginx with:
+
+    ```bash
+    ansible <pattern> -b -m systemd_service -a 'name=nginx state=restarted'
+    ```
+
+    Tonight it goes to the web servers outside production. Without restarting anything, show which hosts your line would run on. The project's `ansible.cfg` points at the inventory below: yours from the last exercise, in INI.
+  inventory:
+    web: [web1, web2, web3, dev1]
+    db: [db1, db2, dev1]
+    prod: [web1, web2, db1]
+    staging: [web3, db2]
+    dev: [dev1]
+    nonprod:children: [staging, dev]
+  solution: ansible 'web:&nonprod' -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
+  checks:
+    - hosts: [web3, dev1]
+      hint: Only the web servers outside prod, web3 and dev1, may be hit. Combine two groups in one pattern, in single quotes.
+    - module: systemd_service
+      args: { name: nginx, state: restarted }
+      hint: Check the line you will run. Keep the runbook's module and arguments; only the pattern and one option change.
+    - flags: { list-hosts: true }
+      hint: Add the option that prints the hosts and runs nothing.
+  right:
+    - ansible 'nonprod:&web' -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
+    - ansible 'web:!prod' -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
+    - ansible web -b -m systemd_service -a 'name=nginx state=restarted' --limit nonprod --list-hosts
+    - ansible 'web:&nonprod' -b -m ansible.builtin.systemd_service -a 'state=restarted name=nginx' --list-hosts
+  wrong:
+    - code: ansible 'web:nonprod' -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
+      fails: 1
+    - code: ansible 'web:&staging' -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
+      fails: 1
+    - code: ansible 'nonprod:!db' -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
+      fails: 1
+    - code: ansible nonprod -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
+      fails: 1
+    - code: ansible 'web:&nonprod' --list-hosts
+      fails: 2
+    - code: ansible 'web:&nonprod' -b -m systemd_service -a 'name=nginx state=restarted'
+      fails: 3

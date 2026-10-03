@@ -12,3 +12,5 @@ modules:
         title: Ad-hoc commands
       - file: 05-modules-and-fqcn
         title: Modules and FQCN
+      - file: 06-checkpoint
+        title: Checkpoint
