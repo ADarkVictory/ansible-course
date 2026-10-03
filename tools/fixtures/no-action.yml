@@ -1,0 +1,3 @@
+- hosts: web
+  tasks:
+    - name: Install nginx

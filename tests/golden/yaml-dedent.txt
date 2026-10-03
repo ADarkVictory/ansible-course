@@ -1,0 +1,8 @@
+[ERROR]: YAML parsing failed: While parsing a block collection did not find expected '-' indicator.
+Origin: /home/student/playbook.yml:5:5
+
+3     - name: Install nginx
+4       ansible.builtin.dnf:
+5     name: nginx
+      ^ column 5
+

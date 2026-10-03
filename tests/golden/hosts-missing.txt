@@ -1,0 +1,6 @@
+[ERROR]: The field 'hosts' is required but was not set.
+Origin: /home/student/playbook.yml:1:3
+
+1 - name: Install nginx
+    ^ column 3
+

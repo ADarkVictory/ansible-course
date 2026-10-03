@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""Writes modules.yaml from ansible-doc. Run: .venv/bin/python tools/gen-modules.py (after tools/capture.sh made the venv)."""
-import json, os, re, subprocess, sys
+"""Writes modules.yaml (from ansible-doc and real module runs) and keywords.yaml (from ansible-core's classes). Run: .venv/bin/python tools/gen-modules.py (after tools/capture.sh made the venv)."""
+import json, operator, os, re, subprocess, sys
 from pathlib import Path
 import yaml
+from ansible.parsing.mod_args import ModuleArgsParser
+from ansible.playbook.block import Block
+from ansible.playbook.play import Play
 
 MODULES = "ping command shell copy file user group dnf apt package service systemd_service lineinfile template debug setup".split()
 FREEFORM = {"command", "shell"}
@@ -50,3 +53,14 @@ for m in MODULES:
 for m, backend in (("package", "dnf"), ("service", "systemd_service")):
     out["ansible.builtin." + m]["supported"] = out["ansible.builtin." + backend]["supported"]
 (root / "modules.yaml").write_text(yaml.safe_dump(out, sort_keys=False, width=1000))
+
+# Keyword sets, read from the real classes (2.21.4), not from memory. Written to keywords.yaml.
+#   play:  Play fields in Base.load_data's load order (sorted by FieldAttribute priority); the task lists load in this order.
+#   task:  the keys ModuleArgsParser treats as task keywords (Task + Handler fields, local_action, static); any other key is an action candidate.
+#   block: Block fields.
+keywords = {
+    "play": [n for n, _ in sorted(Play.fattributes.items(), key=operator.itemgetter(1))],
+    "task": sorted(ModuleArgsParser({})._task_attrs),
+    "block": sorted(Block.fattributes),
+}
+(root / "keywords.yaml").write_text(yaml.safe_dump(keywords, sort_keys=False, width=1000))

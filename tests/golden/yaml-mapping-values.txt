@@ -1,0 +1,8 @@
+[ERROR]: YAML parsing failed: Mapping values are not allowed in this context.
+Origin: /home/student/playbook.yml:5:14
+
+3     - name: Install nginx
+4       ansible.builtin.dnf: name=nginx
+5         state: present
+               ^ column 14
+

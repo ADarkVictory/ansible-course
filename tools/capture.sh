@@ -21,7 +21,9 @@ out="$root/tests/golden"
 mkdir -p "$out"
 cd /home/student || exit 1
 
-for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param unknown-play-keyword task-keyword-typo run-sample run-sample-second run-no-facts adhoc-ping; do
+for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param unknown-play-keyword task-keyword-typo \
+         yaml-colon yaml-unclosed-quote yaml-dedent yaml-mapping-values no-action task-not-a-dict hosts-missing \
+         run-sample run-sample-second run-no-facts adhoc-ping; do
   src=${f%-second}
   [ "$f" = run-sample-second ] || rm -rf /tmp/web1 /tmp/web2   # fresh hosts; the second run must see the first run's state
   if [ "$f" = adhoc-ping ]; then
