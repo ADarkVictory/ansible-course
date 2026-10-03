@@ -3596,5 +3596,4 @@ var CHOMPING_KEEP = CHOMPING_MODE.KEEP;
 //#endregion
 export { CHOMPING_CLIP, CHOMPING_KEEP, CHOMPING_MODE, CHOMPING_STRIP, COLLECTION_STYLE, COLLECTION_STYLE_BLOCK, COLLECTION_STYLE_FLOW, CORE_SCHEMA, DEFAULT_SCALAR_STYLE_RULES, DUMP_SCHEMA, EVENT_ALIAS, EVENT_DOCUMENT, EVENT_ID, EVENT_MAPPING, EVENT_POP, EVENT_SCALAR, EVENT_SEQUENCE, FAILSAFE_SCHEMA, JSON_SCHEMA, NOT_RESOLVED, SCALAR_STYLE, SCALAR_STYLE_DOUBLE_QUOTED, SCALAR_STYLE_FOLDED_BLOCK, SCALAR_STYLE_LITERAL_BLOCK, SCALAR_STYLE_PLAIN, SCALAR_STYLE_SINGLE_QUOTED, Schema, VISIT_BREAK, VISIT_SKIP, YAML11_SCHEMA, YAMLException, binaryTag, boolCoreTag, boolJsonTag, boolYaml11Tag, constructFromEvents, defineMappingTag, defineScalarTag, defineSequenceTag, dump, eventsToAst, floatCoreTag, floatJsonTag, floatYaml11Tag, getScalarValue, intCoreTag, intJsonTag, intYaml11Tag, jsToAst, legacyMapTag, load, loadAll, mapTag, mergeTag, nullCoreTag, nullJsonTag, nullYaml11Tag, omapTag, pairsTag, parseEvents, present, realMapTag, seqTag, setTag, strTag, timestampTag, visit };
 
-// Local addition (not upstream): js-yaml 5 has no default export; the course imports it as `yaml`.
-export default { load, loadAll, dump };
+//# sourceMappingURL=js-yaml.mjs.map

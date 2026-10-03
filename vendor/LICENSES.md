@@ -1,10 +1,10 @@
 # Vendored libraries
 
-Copied unmodified from the npm tarballs (`npm pack`) unless noted.
+Copied byte-identical from the npm tarballs (`npm pack`), including sourceMappingURL comments.
 
 ## js-yaml 5.4.2 (MIT) - `vendor/js-yaml.mjs`
 
-Source: `dist/js-yaml.mjs`. Local change: the `sourceMappingURL` comment is replaced by a one-line `export default { load, loadAll, dump };`, because js-yaml 5 has no default export.
+Source: `dist/js-yaml.mjs`. No default export; import with `import * as yaml from './vendor/js-yaml.mjs'`.
 
     (The MIT License)
     
@@ -30,7 +30,7 @@ Source: `dist/js-yaml.mjs`. Local change: the `sourceMappingURL` comment is repl
 
 ## marked 18.0.14 (MIT, plus BSD-3-Clause for the Markdown portion) - `vendor/marked.esm.js`
 
-Source: `lib/marked.esm.js`. Local change: trailing `sourceMappingURL` comment removed (no map is vendored).
+Source: `lib/marked.esm.js`.
 
     # License information
     
