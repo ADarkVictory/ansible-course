@@ -325,6 +325,7 @@ test('ad hoc: failures whose real text the course cannot print are a hint (debug
     ["ansible web -m debug -a 'msg=a var=b'", /doesn't simulate this debug failure/],
     ["ansible web -m copy -a 'content=x dest=/tmp/x bogus=1'", /checksum/],
     ["ansible web -m file -a 'path=/x dest=/y state=touch'", /Set path or its alias dest, not both/],
+    ["ansible web -m dnf -a 'name=nginx update_cache=maybe'", /`update_cache` must be a boolean; Ansible cannot convert `maybe`/],
   ]) {
     const r = run(line, {}, [{ pattern: 'web', hint: 'h' }]);
     assert.deepEqual([r.ok, r.output], [false, ''], line);

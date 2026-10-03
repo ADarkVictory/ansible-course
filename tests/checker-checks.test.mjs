@@ -145,6 +145,35 @@ test('a keyword the simulator does not model (when, failed_when): the hint and n
   }
 });
 
+test('a boolean or integer parameter Ansible cannot convert: the hint and no output (its real message holds a set in random order)', () => {
+  const ex = one([{ task: { module: 'dnf' }, has: { name: 'nginx' }, hint: 'h' }]);
+  const dnf = (extra) => play('  tasks:', `    - ansible.builtin.dnf: { name: nginx, state: present, ${extra} }`);
+  for (const [extra, hint] of [
+    ['update_cache: maybe', '`update_cache` must be a boolean; Ansible cannot convert `maybe`.'],
+    ['disable_gpg_check: maybe', '`disable_gpg_check` must be a boolean; Ansible cannot convert `maybe`.'],
+    ['install_weak_deps: sometimes', '`install_weak_deps` must be a boolean; Ansible cannot convert `sometimes`.'],
+    ['lock_timeout: soon', '`lock_timeout` must be an integer; Ansible cannot convert `soon`.'],
+    ['lock_timeout: 1.5', '`lock_timeout` must be an integer; Ansible cannot convert `1.5`.'],
+    ['update_cache: 2', '`update_cache` must be a boolean; Ansible cannot convert `2`.'],
+    ['update_cache: ', '`update_cache` must be a boolean; Ansible cannot convert `None`.'], // its default is false, so None is checked
+  ]) assert.deepEqual(check(ex, dnf(extra)), { ok: false, output: '', hint }, extra);
+  assert.deepEqual(check(one([{ task: { module: 'systemd_service' }, hint: 'h' }]), play('  tasks:', '    - ansible.builtin.systemd_service: { name: nginx, enabled: maybe }')),
+    { ok: false, output: '', hint: '`enabled` must be a boolean; Ansible cannot convert `maybe`.' });
+  // the type check comes after required and before choices (module_utils/common/arg_spec.py)
+  assert.match(check(ex, play('  tasks:', '    - ansible.builtin.file: { state: bogus, follow: maybe }')).output, /missing required arguments: path/);
+  assert.match(check(ex, play('  tasks:', '    - ansible.builtin.file: { path: /x, state: bogus, follow: maybe }')).hint, /`follow` must be a boolean/);
+});
+
+test('values Ansible converts (convert_bool.py boolean(), check_type_int) pass, and so does a {{ }} value', () => {
+  const ex = one([{ task: { module: 'dnf' }, has: { name: 'nginx' }, hint: 'h' }]);
+  for (const extra of ['update_cache: yes', 'update_cache: true', 'update_cache: "1"', 'update_cache: " YES "', 'update_cache: 0', 'update_cache: "off"',
+    'lock_timeout: 30', 'lock_timeout: "30"', 'lock_timeout: " 7 "', 'lock_timeout: "1e1"', 'lock_timeout: "1_0"', 'lock_timeout: 2.0', 'lock_timeout: true',
+    'lock_timeout: "{{ inventory_hostname }}"']) {
+    assert.equal(check(ex, play('  tasks:', `    - ansible.builtin.dnf: { name: nginx, state: present, ${extra} }`)).ok, true, extra);
+  }
+  assert.equal(check(one([{ task: { module: 'file' }, hint: 'h' }]), play('  tasks:', '    - ansible.builtin.file: { path: /x, state: touch, mode: }')).ok, true); // no type to check
+});
+
 test('has looks in keywords as well as args, on the given keys only', () => {
   const ex = one([{ task: { module: 'command' }, has: { become: true, creates: '/tmp/x' } }]);
   assert.equal(check(ex, play('  tasks:', '    - command: touch /tmp/x creates=/tmp/x', '      become: true')).ok, true);

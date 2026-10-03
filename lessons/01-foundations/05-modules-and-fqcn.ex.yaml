@@ -222,6 +222,17 @@
                 state: present
               when: false
       fails: hint
+    - code: |
+        - name: Set up the web servers
+          hosts: web
+          become: true
+          tasks:
+            - name: Install nginx
+              ansible.builtin.dnf:
+                name: nginx
+                state: present
+                update_cache: maybe
+      fails: hint
 
 - id: modules-and-fqcn-5
   type: choice

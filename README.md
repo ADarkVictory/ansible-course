@@ -88,7 +88,7 @@ Each `.ex.yaml` is a list. Common keys: `id`, `type` (`choice`, `write` or `comm
 - `stdout`: what a `command` or `shell` module prints on each host. `output_golden: <stem>`: show `tests/golden/<stem>.txt`, for what the engine cannot render (`ansible-doc`).
 
 **Test-only keys**, never shown to the learner:
-- `wrong`: a list of `{ code, fails }` mistakes. `fails` is the 1-based index of the check that must catch it, `fqcn` for the FQCN rule, `error` for a playbook or command on which real Ansible stops (its `[ERROR]` is the feedback, with no hint), or `hint` for what the course does not simulate (its hint, with no output). Every `write` and `command` exercise has at least one `wrong` (the tests enforce it).
+- `wrong`: a list of `{ code, fails }` mistakes. `fails` is the 1-based index of the check that must catch it, `fqcn` for the FQCN rule, `error` for a playbook or command on which real Ansible stops (its `[ERROR]` is the feedback, with no hint), or `hint` for input whose real output the course does not simulate or cannot print byte for byte (a course hint, with no output). Every `write` and `command` exercise has at least one `wrong` (the tests enforce it).
 - `right`: other correct answers that real Ansible and ansible-lint accept. They must pass the checks. Use for alternative spellings, such as `k=v` arguments or parameter aliases.
 
 The UI gives the hint after the first failed attempt and **Show solution** after three.

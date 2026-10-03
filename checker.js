@@ -817,6 +817,7 @@ function moduleFailure(module, spec, mod, args, twin) {
   if (empty) return `This course doesn't simulate an empty \`${empty}\` yet.`; // the module accepts it, then fails in ways not captured
   msg = argsError(spec, mod, args, twin);
   if (!msg) return undefined;
+  if (msg.hint) return msg.hint;
   // after copy's action plugin, the module's failure also carries the file's checksum
   if (module === 'ansible.builtin.copy' || module === 'ansible.builtin.template') {
     return "This course doesn't simulate this copy failure yet: Ansible's message would include the file's checksum.";
@@ -825,13 +826,14 @@ function moduleFailure(module, spec, mod, args, twin) {
 }
 
 // The module's own argument check (module_utils/common/arg_spec.py) over canonical names, as the first error it reports:
-// mutually_exclusive, required, choices, then (with defaults that are not None filled in) required_one_of, required_if,
-// required_by, and unsupported parameters last. Data: modules.yaml, from ansible-core's own argument specs.
+// mutually_exclusive, required, types (bool and int), choices, then (with defaults that are not None filled in) required_one_of,
+// required_if, required_by, and unsupported parameters last. Data: modules.yaml, from ansible-core's own argument specs.
+// A type failure comes back as { hint }: Ansible's bool message lists a Python set, in an order that changes from run to run.
 // choices: values are compared as Ansible converts them to a string (True, None, 7), exact and case-sensitive, except that
 // "True"/"False" stand for the one choice that is a boolean word; a value still holding {{ }} is unknown until run time.
 // Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text); the message
 // names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
-// ponytail: parameter types are not checked (a list where a string belongs), and two bad values report in doc order.
+// ponytail: only bool and int types are checked (not a list where a string belongs), and two bad values report in doc order.
 const BOOL_WORDS = { True: ['y', 'yes', 'on', '1', 'true', 't'], False: ['n', 'no', 'off', '0', 'false', 'f'] };
 function argsError(spec, mod, args, twin) {
   // The specs name an option as the module does; args use ansible-doc's name, which differs once (apt's package is doc's name).
@@ -840,6 +842,12 @@ function argsError(spec, mod, args, twin) {
   if (mutex.length) return `parameters are mutually exclusive: ${mutex.map((g) => g.join('|')).join(', ')}`;
   const missing = spec.required.filter((p) => !given(p));
   if (missing.length) return `missing required arguments: ${missing.join(', ')}`;
+  for (const [p, type] of Object.entries(spec.types ?? {})) {
+    const k = spec.aliases[p] ?? p, v = args[k];
+    // an empty value is checked only when the default is not None; a value with {{ }} is unknown until run time
+    if (!(k in args) || (v === null ? !(p in (spec.defaults ?? {})) : typeof v === 'string' && /\{\{|\{%/.test(v))) continue;
+    if (!(type === 'bool' ? isBool(v) : isInt(v))) return { hint: `\`${p}\` must be ${type === 'bool' ? 'a boolean' : 'an integer'}; Ansible cannot convert \`${pyStr(v)}\`.` };
+  }
   for (const [p, choices] of Object.entries(spec.choices)) {
     if (!(p in args)) continue;
     const v = pyStr(args[p]);
@@ -862,6 +870,19 @@ function argsError(spec, mod, args, twin) {
   const bad = Object.keys(args).filter((k) => !legal.has(k)).sort();
   const ran = twin ? mod : spec.reports_as[mod.includes('.') ? 'fqcn' : 'short']; // a twin runs under the name typed
   if (bad.length) return `Unsupported parameters for (${ran}) module: ${bad.join(', ')}. Supported parameters include: ${spec.supported}`;
+}
+
+// What Ansible's boolean() (module_utils/parsing/convert_bool.py) and check_type_int (module_utils/common/validation.py) accept:
+// a boolean word after lower() and strip(), 1 or 0; an int (a bool is one), or a float or a string Decimal() reads as a whole number.
+const isBool = (v) => typeof v === 'boolean' || v === 1 || v === 0
+  || (typeof v === 'string' && [...BOOL_WORDS.True, ...BOOL_WORDS.False].includes(v.toLowerCase().trim()));
+function isInt(v) {
+  if (typeof v === 'boolean' || typeof v === 'number') return Number.isInteger(v) || v === true || v === false;
+  // Decimal's string syntax (underscores between digits); whole when the digits after the exponent shift are all 0
+  const m = typeof v === 'string' && /^[+-]?(\d(?:_?\d)*)?(?:\.(\d(?:_?\d)*)?)?(?:e([+-]?\d(?:_?\d)*))?$/i.exec(v.trim());
+  if (!m || !(m[1] || m[2])) return false;
+  const digits = (m[1] ?? '') + (m[2] ?? ''), shift = Number((m[3] ?? '0').replaceAll('_', '')) - (m[2] ?? '').replaceAll('_', '').length;
+  return shift >= 0 || /^[0_]*$/.test(digits.replaceAll('_', '').slice(shift));
 }
 
 const fqcn = (name) => name.includes('.') ? name : `ansible.builtin.${name}`;

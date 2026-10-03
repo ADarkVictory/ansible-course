@@ -59,7 +59,7 @@ def choices(m, p, documented):
 # its action plugin passes to validate_argument_spec), caught before anything runs. Action plugins hand the work to another module
 # (shell to command, template to copy; package and service to the RHEL-family backends dnf and systemd_service), so that module's
 # argument spec is the one that applies. The simulator reports the first failure in arg_spec.py's order: mutually_exclusive,
-# required, choices, required_one_of, required_if, required_by, then unsupported parameters; goldens show each message.
+# required, types (bool and int), choices, required_one_of, required_if, required_by, then unsupported parameters.
 SPEC_OF = {"shell": "command", "template": "copy", "package": "dnf", "service": "systemd_service"}
 class Caught(Exception): pass
 def catch(*_, **kwargs): raise Caught(kwargs)
@@ -78,13 +78,19 @@ def checks(m):
     if kw.get("required_together"):
         sys.exit(f"gen-modules: {m} has required_together, which the simulator does not check yet")
     spec = kw["argument_spec"]
+    if kw.get("add_file_common_args"):  # as AnsibleModule.__init__ adds them
+        spec = {**spec, **{k: v for k, v in basic.FILE_COMMON_ARGUMENTS.items() if k not in spec}}
     lists = lambda v: [lists(x) for x in v] if isinstance(v, (list, tuple)) else v
     out = {"required": sorted(p for p, o in spec.items() if o.get("required"))}
     out |= {k: lists(kw[k]) for k in ("mutually_exclusive", "required_one_of", "required_if") if kw.get(k)}
     if kw.get("required_by"): out["required_by"] = {k: lists(v) for k, v in kw["required_by"].items()}
-    # Defaults that are not None are set before required_one_of/if/by run, so a parameter with one always counts as given.
+    # bool and int parameters, in argument-spec order: their values are converted (and may fail) after required, before choices.
+    types = {p: o["type"] for p, o in spec.items() if o.get("type") in ("bool", "int")}
+    if types: out["types"] = types
+    # Defaults that are not None are set before the type check and required_one_of/if/by run, so a parameter with one always counts
+    # as given, and an empty (None) value for it fails the type check.
     named = {p for g in out.get("required_one_of", []) for p in g} | {p for k, _, ps, *_ in out.get("required_if", []) for p in [k, *ps]} \
-        | {p for k, ps in out.get("required_by", {}).items() for p in [k, *ps]}
+        | {p for k, ps in out.get("required_by", {}).items() for p in [k, *ps]} | set(types)
     defaults = {p: lists(spec[p]["default"]) for p in sorted(named) if spec.get(p, {}).get("default") is not None}
     return out | ({"defaults": defaults} if defaults else {})
 

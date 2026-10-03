@@ -36,6 +36,16 @@ ansible.builtin.command:
   - - _raw_params
     - cmd
     - argv
+  types:
+    _uses_shell: bool
+    expand_argument_vars: bool
+    stdin_add_newline: bool
+    strip_empty_ends: bool
+  defaults:
+    _uses_shell: false
+    expand_argument_vars: true
+    stdin_add_newline: true
+    strip_empty_ends: true
 ansible.builtin.shell:
   params:
   - chdir
@@ -61,6 +71,16 @@ ansible.builtin.shell:
   - - _raw_params
     - cmd
     - argv
+  types:
+    _uses_shell: bool
+    expand_argument_vars: bool
+    stdin_add_newline: bool
+    strip_empty_ends: bool
+  defaults:
+    _uses_shell: false
+    expand_argument_vars: true
+    stdin_add_newline: true
+    strip_empty_ends: true
 ansible.builtin.copy:
   params:
   - attributes
@@ -94,6 +114,19 @@ ansible.builtin.copy:
   choices: {}
   required:
   - dest
+  types:
+    backup: bool
+    force: bool
+    remote_src: bool
+    local_follow: bool
+    follow: bool
+    unsafe_writes: bool
+  defaults:
+    backup: false
+    follow: false
+    force: true
+    remote_src: false
+    unsafe_writes: false
 ansible.builtin.file:
   params:
   - access_time
@@ -134,6 +167,17 @@ ansible.builtin.file:
     - touch
   required:
   - path
+  types:
+    recurse: bool
+    force: bool
+    follow: bool
+    _diff_peek: bool
+    unsafe_writes: bool
+  defaults:
+    follow: true
+    force: false
+    recurse: false
+    unsafe_writes: false
 ansible.builtin.user:
   params:
   - append
@@ -197,8 +241,35 @@ ansible.builtin.user:
   - - append
     - true
     - - groups
+  types:
+    uid: int
+    non_unique: bool
+    password_expire_max: int
+    password_expire_min: int
+    password_expire_warn: int
+    hidden: bool
+    force: bool
+    remove: bool
+    create_home: bool
+    system: bool
+    move_home: bool
+    append: bool
+    generate_ssh_key: bool
+    ssh_key_bits: int
+    password_lock: bool
+    local: bool
+    password_expire_account_disable: int
+    uid_min: int
+    uid_max: int
   defaults:
     append: false
+    create_home: true
+    force: false
+    move_home: false
+    non_unique: false
+    remove: false
+    ssh_key_bits: 0
+    system: false
 ansible.builtin.group:
   params:
   - force
@@ -226,8 +297,19 @@ ansible.builtin.group:
   - - non_unique
     - true
     - - gid
+  types:
+    force: bool
+    gid: int
+    system: bool
+    local: bool
+    non_unique: bool
+    gid_min: int
+    gid_max: int
   defaults:
+    force: false
+    local: false
     non_unique: false
+    system: false
 ansible.builtin.dnf:
   params:
   - allow_downgrade
@@ -286,9 +368,41 @@ ansible.builtin.dnf:
   - - name
     - list
     - update_cache
+  types:
+    allow_downgrade: bool
+    allowerasing: bool
+    autoremove: bool
+    best: bool
+    bugfix: bool
+    cacheonly: bool
+    disable_gpg_check: bool
+    download_only: bool
+    install_weak_deps: bool
+    nobest: bool
+    security: bool
+    skip_broken: bool
+    update_cache: bool
+    update_only: bool
+    validate_certs: bool
+    sslverify: bool
+    lock_timeout: int
   defaults:
+    allow_downgrade: false
+    allowerasing: false
+    autoremove: false
+    bugfix: false
+    cacheonly: false
+    disable_gpg_check: false
+    download_only: false
+    install_weak_deps: true
+    lock_timeout: 30
     name: []
+    security: false
+    skip_broken: false
+    sslverify: true
     update_cache: false
+    update_only: 'no'
+    validate_certs: true
 ansible.builtin.apt:
   params:
   - allow_change_held_packages
@@ -355,8 +469,43 @@ ansible.builtin.apt:
     - package
     - update_cache
     - upgrade
+  types:
+    update_cache: bool
+    update_cache_retries: int
+    update_cache_retry_max_delay: int
+    cache_valid_time: int
+    purge: bool
+    install_recommends: bool
+    force: bool
+    autoremove: bool
+    autoclean: bool
+    fail_on_autoremove: bool
+    policy_rc_d: int
+    only_upgrade: bool
+    force_apt_get: bool
+    clean: bool
+    allow_unauthenticated: bool
+    allow_downgrade: bool
+    allow_change_held_packages: bool
+    lock_timeout: int
+    auto_install_module_deps: bool
   defaults:
+    allow_change_held_packages: false
+    allow_downgrade: false
+    allow_unauthenticated: false
+    auto_install_module_deps: true
+    autoclean: false
     autoremove: false
+    cache_valid_time: 0
+    clean: false
+    fail_on_autoremove: false
+    force: false
+    force_apt_get: false
+    lock_timeout: 60
+    only_upgrade: false
+    purge: false
+    update_cache_retries: 5
+    update_cache_retry_max_delay: 12
     upgrade: 'no'
 ansible.builtin.package:
   params:
@@ -388,9 +537,41 @@ ansible.builtin.package:
   - - name
     - list
     - update_cache
+  types:
+    allow_downgrade: bool
+    allowerasing: bool
+    autoremove: bool
+    best: bool
+    bugfix: bool
+    cacheonly: bool
+    disable_gpg_check: bool
+    download_only: bool
+    install_weak_deps: bool
+    nobest: bool
+    security: bool
+    skip_broken: bool
+    update_cache: bool
+    update_only: bool
+    validate_certs: bool
+    sslverify: bool
+    lock_timeout: int
   defaults:
+    allow_downgrade: false
+    allowerasing: false
+    autoremove: false
+    bugfix: false
+    cacheonly: false
+    disable_gpg_check: false
+    download_only: false
+    install_weak_deps: true
+    lock_timeout: 30
     name: []
+    security: false
+    skip_broken: false
+    sslverify: true
     update_cache: false
+    update_only: 'no'
+    validate_certs: true
 ansible.builtin.service:
   params:
   - arguments
@@ -432,9 +613,17 @@ ansible.builtin.service:
     - name
     masked:
     - name
+  types:
+    enabled: bool
+    force: bool
+    masked: bool
+    daemon_reload: bool
+    daemon_reexec: bool
+    no_block: bool
   defaults:
     daemon_reexec: false
     daemon_reload: false
+    no_block: false
 ansible.builtin.systemd_service:
   params:
   - daemon_reexec
@@ -480,9 +669,17 @@ ansible.builtin.systemd_service:
     - name
     masked:
     - name
+  types:
+    enabled: bool
+    force: bool
+    masked: bool
+    daemon_reload: bool
+    daemon_reexec: bool
+    no_block: bool
   defaults:
     daemon_reexec: false
     daemon_reload: false
+    no_block: false
 ansible.builtin.lineinfile:
   params:
   - attributes
@@ -532,6 +729,18 @@ ansible.builtin.lineinfile:
     - search_string
   - - backrefs
     - search_string
+  types:
+    backrefs: bool
+    create: bool
+    backup: bool
+    firstmatch: bool
+    unsafe_writes: bool
+  defaults:
+    backrefs: false
+    backup: false
+    create: false
+    firstmatch: false
+    unsafe_writes: false
 ansible.builtin.template:
   params:
   - attributes
@@ -569,6 +778,19 @@ ansible.builtin.template:
   choices: {}
   required:
   - dest
+  types:
+    backup: bool
+    force: bool
+    remote_src: bool
+    local_follow: bool
+    follow: bool
+    unsafe_writes: bool
+  defaults:
+    backup: false
+    follow: false
+    force: true
+    remote_src: false
+    unsafe_writes: false
 ansible.builtin.debug:
   params:
   - msg
@@ -585,6 +807,10 @@ ansible.builtin.debug:
   mutually_exclusive:
   - - msg
     - var
+  types:
+    verbosity: int
+  defaults:
+    verbosity: 0
 ansible.builtin.setup:
   params:
   - fact_path
@@ -599,6 +825,10 @@ ansible.builtin.setup:
     fqcn: ansible.builtin.setup
   choices: {}
   required: []
+  types:
+    gather_timeout: int
+  defaults:
+    gather_timeout: 10
 known:
 - add_host
 - apt

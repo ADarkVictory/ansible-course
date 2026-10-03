@@ -100,8 +100,8 @@ test('every output_golden names a file in tests/golden, on an ansible-doc exerci
 });
 
 // fails: fqcn names the FQCN rule of an exercise with fqcn: true, which runs before the checks; fails: error, a playbook real
-// Ansible stops on (its [ERROR] is the learner's feedback, with no check hint); fails: hint, what the course does not simulate
-// (its hint, with no output).
+// Ansible stops on (its [ERROR] is the learner's feedback, with no check hint); fails: hint, input whose real output the course
+// does not simulate or cannot print byte for byte (a course hint, with no output).
 test('every wrong entry has code and a valid 1-based fails', () => {
   for (const e of all.filter((e) => e.wrong)) {
     for (const w of e.wrong) {
@@ -141,7 +141,7 @@ test('every wrong entry fails at exactly its check', () => {
         continue;
       }
       if (w.fails === 'hint') {
-        assert.ok(!r.ok && r.failedCheck === undefined && r.output === '' && /doesn't simulate/.test(r.hint), `${e.id}: wrong entry expected the course hint\n${w.code}`);
+        assert.ok(!r.ok && r.failedCheck === undefined && r.output === '' && r.hint, `${e.id}: wrong entry expected a course hint and no output\n${w.code}`);
         continue;
       }
       assert.ok(!r.ok && r.failedCheck === w.fails, `${e.id}: wrong entry expected to fail check ${w.fails}, got ${r.ok ? 'ok' : `check ${r.failedCheck}`}\n${w.code}`);

@@ -7,7 +7,7 @@
       why: Only the control node has Ansible installed. It copies each module to the server for the task and deletes it afterwards.
     - text: SSH access and Python 3.9 or newer
       correct: true
-      why: "Ansible logs in over SSH and runs each module with the server's own Python. Nothing Ansible-specific is installed. Check the version on older servers: below 3.9, every task fails with `Ansible requires Python 3.9 or newer on the target`."
+      why: "Ansible logs in over SSH and runs each module with the server's own Python. Nothing Ansible-specific is installed. Check the version on older servers: below 3.9, every module task fails with `Ansible requires Python 3.9 or newer on the target`."
     - text: An Ansible agent running, with a port open for the control node
       correct: false
       why: Agent-based tools work that way. Ansible has no agent; it connects over SSH.
