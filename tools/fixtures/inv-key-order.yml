@@ -1,0 +1,10 @@
+"20":
+  hosts:
+    h2:
+"10":
+  hosts:
+    h1:
+web:
+  hosts:
+    "9":
+    web1:

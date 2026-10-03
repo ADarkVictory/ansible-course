@@ -1,0 +1,10 @@
+[WARNING]: Invalid characters were found in group names but not replaced, use -vvvv to see details
+@all:
+  |--@ungrouped:
+  |--@20:
+  |  |--h2
+  |--@10:
+  |  |--h1
+  |--@web:
+  |  |--9
+  |  |--web1

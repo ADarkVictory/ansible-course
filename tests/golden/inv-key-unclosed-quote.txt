@@ -1,0 +1,37 @@
+[WARNING]: Failed to parse inventory with 'auto' plugin: YAML parsing failed: While scanning a quoted scalar found unexpected end of stream.
+
+Failed to parse inventory with 'auto' plugin.
+
+<<< caused by >>>
+
+YAML parsing failed: While scanning a quoted scalar found unexpected end of stream.
+Origin: /home/student/inventory.yml:4:1
+
+(source not shown: file truncated)
+
+[WARNING]: Failed to parse inventory with 'yaml' plugin: YAML parsing failed: While scanning a quoted scalar found unexpected end of stream.
+
+Failed to parse inventory with 'yaml' plugin.
+
+<<< caused by >>>
+
+YAML parsing failed: While scanning a quoted scalar found unexpected end of stream.
+Origin: <inventory plugin 'yaml' with source '/home/student/inventory.yml'>
+
+[WARNING]: Failed to parse inventory with 'ini' plugin: Failed to parse inventory: Error parsing host definition '"web:': No closing quotation
+
+Failed to parse inventory with 'ini' plugin.
+
+<<< caused by >>>
+
+Failed to parse inventory.
+Origin: /home/student/inventory.yml
+
+<<< caused by >>>
+
+Error parsing host definition '"web:': No closing quotation
+
+[WARNING]: Unable to parse /home/student/inventory.yml as an inventory source
+[WARNING]: No inventory was parsed, only implicit localhost is available
+@all:
+  |--@ungrouped:

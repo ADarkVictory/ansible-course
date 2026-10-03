@@ -131,7 +131,7 @@ test('what the engine cannot render faithfully gives no output and says so', () 
     ['web:\n  hosts:\n    web[1:3]:\n', /host ranges/],
     ['web:\n  hosts:\n    web1:2222:\n', /host ranges or ports/],
     ['web:\n  hosts:\n    web1:\n      http-port: 8080\n', /variable name 'http-port'/],
-    ['web:\n  vars:\n    true: 1\n', /variable name 'true'/],
+    ['web:\n  vars:\n    true: 1\n', /YAML reads `true` as a boolean/],
     ['plugin: constructed\n', /inventory plugins/],
     ['{}\n', /INI/],
     ['web1\n', /INI/],
@@ -148,4 +148,41 @@ test('what the engine cannot render faithfully gives no output and says so', () 
 test('two name clashes: both warnings (real Ansible orders them at random; the engine uses definition order)', () => {
   const out = parseInventory('web:\n  hosts:\n    web1:\ndb:\n  hosts:\n    db1:\nprod:\n  hosts:\n    web:\n    db:\n').output;
   assert.match(out, /^\[WARNING\]: Found both group and host with same name: web\n\[WARNING\]: Found both group and host with same name: db\n@all:\n/);
+});
+
+// ---- keys YAML reads as numbers, booleans or null (fix round 1) ---------------------------------------------------
+// Unquoted, they are not names: real Ansible fails on them (goldens inv-key-*), and they must never pass a check.
+test('keys YAML reads as non-strings (1:, yes:, null:, 2024:) fail as real Ansible fails, never as names', () => {
+  for (const n of ['inv-key-host-int', 'inv-key-host-yes', 'inv-key-host-null', 'inv-key-group-int']) {
+    const r = check([{ group: 'web', hint: 'h' }], fixture(n));
+    assert.equal(r.output, golden(n), n);
+    assert.equal(r.ok, false, n);
+    assert.doesNotMatch(r.output, /\|--@?(1|True|None|2024|true|null|yes):?$/m, n);
+  }
+});
+
+test('a host key YAML reads as a boolean no longer passes (inventories-4 solution plus spare: {hosts: {yes:}})', () => {
+  const solution = 'all:\n  children:\n    app:\n      hosts:\n        app1:\n        app2:\n    cache:\n      hosts:\n        redis1:\n';
+  const checks = [{ group: 'app', hosts: ['app1', 'app2'], hint: 'a' }, { group: 'cache', hosts: ['redis1'], hint: 'c' }];
+  assert.equal(check(checks, solution).ok, true);
+  const r = check(checks, `${solution}spare:\n  hosts:\n    yes:\n`);
+  assert.equal(r.ok, false);
+  assert.match(r.output, /Host pattern True must be a string\. Enclose integers\/floats in quotation marks\./);
+});
+
+test('quoted, the same keys are names', () => {
+  const r = check([{ group: 'web', hosts: ['1', 'yes', 'null'], hint: 'h' }], 'web:\n  hosts:\n    "1":\n    \'yes\':\n    "null":\n');
+  assert.equal(r.ok, true);
+});
+
+test('non-string keys the engine cannot print faithfully: no output, and the hint says what YAML read', () => {
+  for (const [src, hint] of [
+    ['web:\n  hosts:\n    1.0e+16:\n', 'YAML reads `1.0e+16` as a number, not a name; quote it.'],
+    ['web:\n  vars:\n    1: x\n', 'YAML reads `1` as a number, not a name; quote it.'],
+    ['web:\n  hosts:\n    web1:\n      on: x\n', 'YAML reads `on` as a boolean, not a name; quote it.'],
+    ['web:\n  hosts:\n    2024-01-01:\n', 'YAML reads `2024-01-01` as a date, not a name; quote it.'],
+  ]) {
+    const r = parseInventory(src);
+    assert.deepEqual([r.output, r.hint], ['', hint], src);
+  }
 });

@@ -256,7 +256,9 @@ function load(src, path = PATH) {
     docs = yaml.constructFromEvents(events, { schema: SCHEMA, json: true, source: src });
   } catch (e) {
     if (!(e instanceof yaml.YAMLException)) throw e;
-    return { error: yamlError(src, e, tree, path), ...(src.includes('\t') && { hint: TAB_HINT }) };
+    // A scalar key js-yaml cannot use as an object key (a date): keyAt is where it starts.
+    const keyAt = /complex keys/.test(e.reason) && tree?.complexKey === undefined ? e.mark?.position : undefined;
+    return { error: yamlError(src, e, tree, path), ...(src.includes('\t') && { hint: TAB_HINT }), ...(keyAt !== undefined && { keyAt }) };
   }
   if (docs.length > 1) {
     // ponytail: libyaml points at the second "---"; a second document opened without "---" falls back to line 1.
@@ -273,18 +275,48 @@ function load(src, path = PATH) {
 // silent; when none does, all three failures are printed and the run goes on with whatever the yaml plugin had added before
 // it stopped (nothing is rolled back, and groups are not attached to `all`). Ported from plugins/inventory/yaml.py,
 // inventory/data.py and inventory/group.py; goldens: tests/golden/inv-*.txt.
-// ponytail: keys are read as strings (a group or host YAML reads as a number, boolean or null is not simulated, nor are
-// integer-like names, which JS objects order first); several group/host name clashes warn in definition order, where
-// real Ansible's order varies from run to run; ansible_group_priority values and duplicate localhost entries are not checked.
+// Mappings are walked in document order from the YAML node tree (JS objects would put integer-like keys first), and an
+// unquoted key YAML reads as a number, boolean or null is not a name: Ansible fails on it (goldens inv-key-*).
+// ponytail: several group/host name clashes warn in definition order, where real Ansible's order varies from run to run;
+// ansible_group_priority values and duplicate localhost entries are not checked.
 const INVALID_GROUP_CHARS = /^\p{Nd}|[^\p{L}\p{N}_]/u; // C.INVALID_VARIABLE_NAMES, Unicode-aware as in Python
 const NOT_SIMULATED_INI = 'Ansible would read this file as an INI inventory, which this course doesn\'t simulate here. Write the inventory in YAML.';
 class Unsupported { constructor(hint) { this.hint = hint; } }
-class ParseFailure { constructor(msg) { this.msg = msg; } }
+class ParseFailure { constructor(msg) { this.msg = msg.trim(); } } // Ansible prints the message stripped
 // utils/vars.py validate_variable_name; an invalid name makes Ansible print a deprecation warning the course does not reproduce.
 const checkVar = (name) => {
+  if (typeof name !== 'string') throw new Unsupported(name.hint); // Ansible's deprecation frame for it is not reproduced
   if (!/^[A-Za-z_]\w*$/.test(name) || ['False', 'None', 'True', 'false', 'none', 'not', 'true'].includes(name)) {
     throw new Unsupported(`This course doesn't simulate Ansible's warning about the variable name '${name}'. Variable names use only letters, digits and underscores, and start with a letter or underscore.`);
   }
+};
+
+// A mapping key as PyYAML types it: the string, or for an unquoted scalar YAML resolves to something else
+// { dataKey (js-yaml's key for it), hint, py (Python's str() of it, when the course can print that), cls, falsy }.
+function keyOf(raw, node) {
+  if (raw === undefined || !node?.plain) return raw; // quoted or tagged: a string
+  let v;
+  try { v = raw === '' ? null : yaml.load(raw, { schema: SCHEMA }); } catch { return raw; }
+  if (typeof v === 'string') return raw;
+  const what = v === null || v === undefined ? 'null' : typeof v === 'boolean' ? 'boolean' : typeof v === 'number' ? 'number' : v instanceof Date ? 'date' : 'value';
+  const k = { dataKey: String(v ?? null), hint: `YAML reads \`${raw}\` as a ${what}, not a name; quote it.`, falsy: v === null || v === undefined || v === false || v === 0 };
+  if (what === 'null') k.py = 'None';
+  if (what === 'boolean') Object.assign(k, { py: v ? 'True' : 'False', cls: "<class 'bool'>" });
+  if (what === 'number') {
+    const int = !/^[-+]?0[0-9_]*:/.test(raw) && yaml.intYaml11Tag.resolve(raw) !== yaml.NOT_RESOLVED;
+    k.cls = `<class 'ansible.module_utils._internal._datatag._AnsibleTagged${int ? 'Int' : 'Float'}'>`;
+    if (int) k.py = Number.isSafeInteger(v) ? String(v) : undefined;
+    else if (Number.isNaN(v)) k.py = 'nan';
+    else if (!Number.isFinite(v)) k.py = v > 0 ? 'inf' : '-inf';
+    else if (Math.abs(v) < 1e16 && (v === 0 || Math.abs(v) >= 1e-4)) k.py = Number.isInteger(v) ? `${v}.0` : String(v); // Python's float repr
+  }
+  return k;
+}
+// The name Ansible prints for a key; throws Unsupported where the course cannot print it as Python would.
+const nameOf = (k) => {
+  if (typeof k === 'string') return k;
+  if (k.py === undefined) throw new Unsupported(k.hint);
+  return k.py;
 };
 
 /**
@@ -300,6 +332,16 @@ export function parseInventory(source) {
   let out = '';
   const warned = new Set(); // Display.warning prints a given message once
   const warn = (msg) => { if (!warned.has(msg)) { warned.add(msg); out += `[WARNING]: ${msg}\n`; } };
+  // [key, value, value node] of a mapping in document order, keys typed by keyOf. Without key nodes (an alias, a merge, a
+  // string section turned into a mapping) the keys are the strings js-yaml made.
+  const entriesOf = (data, node) => {
+    const keys = node?.keys && [...node.keys];
+    if (!keys || node.keys.has('<<') || keys.some(([raw]) => raw === undefined)) return Object.entries(data);
+    return keys.map(([raw, { key, value }]) => {
+      const k = keyOf(raw, key);
+      return [k, data[typeof k === 'string' ? k : k.dataKey], value];
+    });
+  };
   const ancestors = (g, seen = new Set()) => {
     for (const p of groups.get(g).parents) if (!seen.has(p)) { seen.add(p); ancestors(p, seen); }
     return seen;
@@ -322,10 +364,15 @@ export function parseInventory(source) {
     } else throw new ParseFailure(`${child} is not a known host nor group`);
   };
   // yaml.py InventoryModule._parse_group
-  const parseGroup = (name, data) => {
+  const parseGroup = (name, data, node) => {
     if (!(isMap(data) || data === null)) {
-      warn(`Skipping '${name}' as this is not a valid group definition`);
+      warn(`Skipping '${nameOf(name)}' as this is not a valid group definition`);
       return name;
+    }
+    if (typeof name !== 'string' || name === '') { // InventoryData.add_group
+      const py = nameOf(name);
+      const k = typeof name === 'string' ? { falsy: true } : name;
+      throw new ParseFailure(`Unable to add group ${py}: ${k.falsy ? `Invalid empty/false group name provided: ${py}` : `Invalid group name supplied, expected a string but got ${k.cls} for ${py}`}`);
     }
     addGroup(name);
     if (data === null) return name;
@@ -335,17 +382,23 @@ export function parseInventory(source) {
         throw new ParseFailure(`Invalid "${section}" entry for "${name}" group, requires a dictionary, found "${pyType(data[section])}" instead.`);
       }
     }
-    for (const [key, value] of Object.entries(data)) {
+    for (const [key, value, vnode] of entriesOf(data, node)) {
       if (value instanceof Date) throw new Unsupported('This course doesn\'t simulate dates in an inventory yet.');
       if (!(isMap(value) || value === null)) {
-        warn(`Skipping key (${key}) in group (${name}) as it is not a mapping, it is a ${pyType(value)}`);
+        warn(`Skipping key (${nameOf(key)}) in group (${name}) as it is not a mapping, it is a ${pyType(value)}`);
         continue;
       }
       if (value === null) continue;
-      if (key === 'vars') Object.keys(value).forEach(checkVar);
-      else if (key === 'children') for (const [sub, d] of Object.entries(value)) addChild(name, parseGroup(sub, d));
-      else if (key === 'hosts') {
-        for (const [host, d] of Object.entries(value)) {
+      if (key === 'vars') entriesOf(value, vnode).forEach(([k]) => checkVar(k));
+      else if (key === 'children') {
+        for (const [sub, d, n] of entriesOf(value, vnode)) {
+          const child = parseGroup(sub, d, n);
+          if (typeof child !== 'string') throw new ParseFailure(`${nameOf(child)} is not a known host nor group`); // no group or host is a number
+          addChild(name, child);
+        }
+      } else if (key === 'hosts') {
+        for (const [host, d, n] of entriesOf(value, vnode)) {
+          if (typeof host !== 'string') throw new ParseFailure(`Host pattern ${nameOf(host)} must be a string. Enclose integers/floats in quotation marks.`);
           if (host === '') throw new Unsupported('This course doesn\'t simulate an empty host name; give every host a name.');
           if (/[[\]:]/.test(host)) throw new Unsupported('This course doesn\'t simulate host ranges or ports in inventory host names yet.');
           const vars = pyFalsy(d) ? {} : d;
@@ -353,9 +406,9 @@ export function parseInventory(source) {
           if (!hosts.has(host)) hosts.set(host, new Set());
           const g = groups.get(name); // InventoryData.add_host: a host, even where a group has the same name
           if (!g.hosts.includes(host)) { g.hosts.push(host); hosts.get(host).add(name); }
-          Object.keys(vars).forEach(checkVar);
+          entriesOf(vars, n).forEach(([k]) => checkVar(k));
         }
-      } else warn(`Skipping unexpected key (${key}) in group (${name}), only "vars", "children" and "hosts" are valid`);
+      } else warn(`Skipping unexpected key (${nameOf(key)}) in group (${name}), only "vars", "children" and "hosts" are valid`);
     }
     return name;
   };
@@ -364,7 +417,7 @@ export function parseInventory(source) {
     if (pyFalsy(data)) return 'Parsed empty YAML file';
     if (!isMap(data)) return `YAML inventory has invalid structure, it should be a dictionary, got: ${pyType(data)}`;
     try {
-      for (const [name, d] of Object.entries(data)) parseGroup(name, d);
+      for (const [name, d, node] of entriesOf(data, loaded.tree.items[0]?.items[0])) parseGroup(name, d, node);
     } catch (e) {
       if (e instanceof ParseFailure) return e.msg;
       throw e;
@@ -389,6 +442,10 @@ export function parseInventory(source) {
     addGroup('ungrouped');
     addChild('all', 'ungrouped');
     let auto, yamlMsg;
+    if (loaded.keyAt !== undefined) { // js-yaml cannot build a mapping with this key, so the course cannot follow Ansible here
+      const k = keyOf(/^[^:\n]*/.exec(src.slice(loaded.keyAt))[0].trim(), { plain: true });
+      if (typeof k !== 'string') throw new Unsupported(k.hint);
+    }
     if ('error' in loaded) {
       const frame = loaded.error.slice('[ERROR]: '.length).trimEnd();
       yamlMsg = frame.split('\n')[0];
@@ -410,7 +467,9 @@ export function parseInventory(source) {
         if (!groups.get('ungrouped').hosts.includes(host)) { groups.get('ungrouped').hosts.push(host); hosts.get(host).add('ungrouped'); }
       }
       const iniMsg = `Failed to parse inventory: ${ini.msg}`;
-      out += failed('auto', ...auto) + failed('yaml', yamlMsg, `${yamlMsg}\n${pluginOrigin('yaml')}`) + failed('ini', iniMsg, `${iniMsg}\nOrigin: ${INV}`)
+      // An error raised while handling another is printed as its own cause instead of being merged into the message.
+      const iniDetail = ini.chained ? `Failed to parse inventory.\nOrigin: ${INV}\n\n<<< caused by >>>\n\n${ini.msg}` : `${iniMsg}\nOrigin: ${INV}`;
+      out += failed('auto', ...auto) + failed('yaml', yamlMsg, `${yamlMsg}\n${pluginOrigin('yaml')}`) + failed('ini', iniMsg, iniDetail)
         + `[WARNING]: Unable to parse ${INV} as an inventory source\n[WARNING]: No inventory was parsed, only implicit localhost is available\n`;
     }
     const curly = CURLY.test(src) && ('error' in loaded || hasCurly(loaded.data));
@@ -434,8 +493,19 @@ function iniFailure(src) {
     if (line.startsWith('[') && line.endsWith(']')) {
       return { hosts, msg: `Invalid section entry: '${line}'. Please make sure that there are no spaces in the section entry, and that there are no other invalid characters` };
     }
-    if (/["'\\]/.test(line)) throw new Unsupported(NOT_SIMULATED_INI); // ponytail: shlex quoting is not simulated
-    const [host, ...rest] = line.replace(/#.*/, '').split(/\s+/).filter(Boolean); // shlex.split(comments=True), unquoted
+    // shlex.split(line, comments=True): a # outside quotes starts a comment, even inside a word.
+    let cut = line.length;
+    for (let i = 0, q = null; i < line.length; i++) {
+      const c = line[i];
+      if (q) { if (c === q) q = null; else if (q === '"' && c === '\\') i++; }
+      else if (c === '\\') i++;
+      else if (c === '"' || c === "'") q = c;
+      else if (c === '#') { cut = i; break; }
+    }
+    const words = shellWords(line.slice(0, cut));
+    if (!words) return { hosts, chained: true, msg: `Error parsing host definition '${line}': No closing quotation` }; // raised while handling shlex's ValueError
+    if (!words.length) throw new Unsupported(NOT_SIMULATED_INI);
+    const [host, ...rest] = words;
     if (host.includes('[')) throw new Unsupported(NOT_SIMULATED_INI); // host ranges
     if (host.endsWith(':')) return { hosts, msg: `Invalid host pattern '${host}' supplied, ending in ':' is not allowed, this character is reserved to provide a port.` };
     if (host === '---') return { hosts, msg: "Invalid host pattern '---' supplied, '---' is normally a sign this is a YAML file." };
@@ -898,7 +968,8 @@ function nodeTree(src, events) {
     if (!top.keys) return top.items.push(n);
     if (!top.pending) return (top.pending = n);
     if (top.pending.str === undefined) root.complexKey ??= top.pending.pos;
-    else if (top.keys.has(top.pending.str)) dups.push({ ...top.pending, depth: stack.length });
+    // A quoted "1" and a plain 1 are different keys to PyYAML (a string and an int); a quoted and a plain web are the same.
+    else if (top.keys.has(top.pending.str) && isStrKey(top.keys.get(top.pending.str).key) === isStrKey(top.pending)) dups.push({ ...top.pending, depth: stack.length });
     top.keys.set(top.pending.str, { key: top.pending, value: n });
     top.pending = undefined;
   };
@@ -907,11 +978,16 @@ function nodeTree(src, events) {
     if (e.type === E.DOCUMENT || e.type === E.SEQUENCE) stack.push({ pos, items: [] });
     else if (e.type === E.MAPPING) stack.push({ pos, keys: new Map() });
     else if (e.type === E.POP) add(stack.pop());
-    else add(e.type === E.SCALAR ? { pos, str: yaml.getScalarValue(src, e) } : { pos });
+    else add(e.type === E.SCALAR ? { pos, str: yaml.getScalarValue(src, e), plain: e.style === yaml.SCALAR_STYLE_PLAIN && e.tagStart < 0 } : { pos });
   }
   root.dups = dups.sort((a, b) => a.depth - b.depth);
   return root;
 }
+
+const isStrKey = (n) => {
+  if (!n.plain) return true;
+  try { return typeof yaml.load(n.str, { schema: SCHEMA }) === 'string'; } catch { return true; }
+};
 
 // A mapping node's entry for key k ({ key, value }); undefined for aliases and merged (<<) keys.
 const child = (node, k) => node.keys?.get(k);

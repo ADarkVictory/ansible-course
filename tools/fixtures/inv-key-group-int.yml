@@ -1,0 +1,6 @@
+web:
+  hosts:
+    web1:
+2024:
+  hosts:
+    web2:

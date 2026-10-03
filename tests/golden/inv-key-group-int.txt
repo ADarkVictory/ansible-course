@@ -1,0 +1,31 @@
+[WARNING]: Failed to parse inventory with 'auto' plugin: no root 'plugin' key found, '/home/student/inventory.yml' is not a valid YAML inventory plugin config file
+
+Failed to parse inventory with 'auto' plugin.
+
+<<< caused by >>>
+
+no root 'plugin' key found, '/home/student/inventory.yml' is not a valid YAML inventory plugin config file
+Origin: <inventory plugin 'auto' with source '/home/student/inventory.yml'>
+
+[WARNING]: Failed to parse inventory with 'yaml' plugin: Unable to add group 2024: Invalid group name supplied, expected a string but got <class 'ansible.module_utils._internal._datatag._AnsibleTaggedInt'> for 2024
+
+Failed to parse inventory with 'yaml' plugin.
+
+<<< caused by >>>
+
+Unable to add group 2024: Invalid group name supplied, expected a string but got <class 'ansible.module_utils._internal._datatag._AnsibleTaggedInt'> for 2024
+Origin: <inventory plugin 'yaml' with source '/home/student/inventory.yml'>
+
+[WARNING]: Failed to parse inventory with 'ini' plugin: Failed to parse inventory: Invalid host pattern 'web:' supplied, ending in ':' is not allowed, this character is reserved to provide a port.
+
+Failed to parse inventory with 'ini' plugin.
+
+<<< caused by >>>
+
+Failed to parse inventory: Invalid host pattern 'web:' supplied, ending in ':' is not allowed, this character is reserved to provide a port.
+Origin: /home/student/inventory.yml
+
+[WARNING]: Unable to parse /home/student/inventory.yml as an inventory source
+[WARNING]: No inventory was parsed, only implicit localhost is available
+@all:
+  |--@ungrouped:
