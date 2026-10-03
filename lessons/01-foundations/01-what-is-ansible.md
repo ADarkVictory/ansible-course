@@ -79,7 +79,7 @@ The second task is not declarative: it is a command, not a state.
 
 ## Idempotency
 
-An operation is **idempotent** if repeating it changes nothing once the result is reached. A well-written playbook can run any number of times with the same result.
+An operation is **idempotent** if repeating it succeeds and changes nothing once the result is reached. Failing on a repeat counts as not idempotent: in a playbook, a failed task stops the run for that host. A well-written playbook can run any number of times with the same result.
 
 First run of the playbook above:
 
