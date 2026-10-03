@@ -32,9 +32,9 @@ cd /home/student || exit 1
 
 for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param unknown-play-keyword task-keyword-typo \
          yaml-colon yaml-unclosed-quote yaml-dedent yaml-mapping-values no-action task-not-a-dict hosts-missing args-unbalanced-quote raw-params missing-handler tombstone-include tombstone-module yum-unsupported \
-         run-sample run-sample-second run-no-facts run-idempotency run-idempotency-second adhoc-ping; do
+         run-sample run-sample-second run-no-facts run-idempotency run-idempotency-second run-intro run-intro-second adhoc-ping; do
   src=${f%-second}
-  [ "$src" != "$f" ] || rm -rf /tmp/web1 /tmp/web2   # fresh hosts; the second run must see the first run's state
+  [ "$src" != "$f" ] || rm -rf /tmp/web1 /tmp/web2 /tmp/app   # fresh hosts; the second run must see the first run's state
   if [ "$f" = adhoc-ping ]; then
     ansible web -i "$inv" -m ansible.builtin.ping > "$out/$f.txt" 2>&1
   else

@@ -6,7 +6,7 @@ import * as yaml from '../vendor/js-yaml.mjs';
 const names = ['yaml-indent', 'yaml-tab', 'empty', 'not-a-list', 'unknown-module', 'unsupported-param',
   'unknown-play-keyword', 'task-keyword-typo', 'yaml-colon', 'yaml-unclosed-quote', 'yaml-dedent', 'yaml-mapping-values',
   'no-action', 'task-not-a-dict', 'hosts-missing', 'args-unbalanced-quote', 'raw-params', 'missing-handler', 'run-sample', 'run-sample-second', 'run-no-facts', 'run-idempotency',
-  'run-idempotency-second', 'adhoc-ping'];
+  'run-idempotency-second', 'run-intro', 'run-intro-second', 'adhoc-ping'];
 const golden = (n) => readFileSync(new URL(`./golden/${n}.txt`, import.meta.url), 'utf8');
 
 for (const n of names) test(`golden ${n} exists and is non-empty`, () => assert.ok(golden(n).length > 0));

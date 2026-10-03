@@ -1,10 +1,84 @@
 - id: what-is-ansible-1
   type: choice
-  question: How does Ansible normally reach the servers it manages?
+  question: You will manage 200 RHEL servers from one control node. What must each server have?
   options:
-    - text: Over SSH, with no agent installed on the server
-      correct: true
-      why: Ansible is agentless. It connects over SSH and runs its modules with the server's own Python.
-    - text: Through an agent that must be installed on every server
+    - text: "`ansible-core` installed"
       correct: false
-      why: That describes agent-based tools such as Puppet. Ansible needs no agent.
+      why: Only the control node has Ansible installed. It copies each module to the server for the task and deletes it afterwards.
+    - text: SSH access and Python 3.9 or newer
+      correct: true
+      why: Ansible logs in over SSH and runs each module with the server's own Python. Nothing Ansible-specific is installed.
+    - text: An Ansible agent running, with a port open for the control node
+      correct: false
+      why: Agent-based tools work that way. Ansible has no agent; it connects over SSH.
+    - text: Nothing at all, not even Python
+      correct: false
+      why: Modules are Python programs that run on the server, so it needs Python. The one exception, the `raw` module, sends a plain command over SSH; it is mainly used to install Python on a bare server.
+
+- id: what-is-ansible-2
+  type: choice
+  question: Your playbook targets 50 servers. `db7` is powered off during the run. What happens?
+  options:
+    - text: "`db7` applies the changes when it boots, by fetching them from the control node"
+      correct: false
+      why: That is the pull model of agent-based tools. Ansible has nothing on `db7` that could fetch anything; only a new run reaches it.
+    - text: The whole run stops, so that no servers are left in a different state
+      correct: false
+      why: By default one unreachable node does not stop the others. A play can be told to stop as soon as any node fails or cannot be reached, but that is not the default.
+    - text: "`db7` is reported unreachable, the other 49 are configured, and `db7` stays as it was until you run the playbook again"
+      correct: true
+      why: Ansible pushes. An unreachable node is dropped from the run and the rest carry on. Nothing on `db7` will fetch the changes later.
+    - text: Ansible keeps retrying `db7` until it comes back, then configures it
+      correct: false
+      why: By default Ansible tries each node once and reports `UNREACHABLE!` if it cannot connect. It does not wait for the node to come back.
+
+- id: what-is-ansible-3
+  type: choice
+  question: You want nginx on every web server. Which of these is declarative?
+  options:
+    - text: Package `nginx` is installed.
+      correct: true
+      why: "It states the result and leaves the steps to the tool. In Ansible this is the `ansible.builtin.dnf` module with `name: nginx` and `state: present`; the module checks and installs only if needed."
+    - text: "`dnf install -y nginx`"
+      correct: false
+      why: It is a command, a step to perform. dnf happens to do nothing harmful on a second run, but Ansible cannot know that, so run through `shell` it reports `changed` every time.
+    - text: "`rpm -q nginx || dnf install -y nginx`"
+      correct: false
+      why: This is safe to repeat, but it is still imperative. You wrote the check and the step yourself; a declarative module does both for you.
+    - text: "A task with `name: Install nginx`"
+      correct: false
+      why: The `name` is only a label shown in the output. What the task does comes from its module and arguments.
+
+- id: what-is-ansible-4
+  type: choice
+  question: Which of these commands is idempotent?
+  options:
+    - text: "`echo 'nameserver 10.0.0.2' >> /etc/resolv.conf`"
+      correct: false
+      why: Each run appends another copy of the line, so every repeat changes the file.
+    - text: "`useradd deploy`"
+      correct: false
+      why: It creates the user once, then fails on every later run because the user exists. An idempotent operation succeeds on a repeat and changes nothing.
+    - text: "`systemctl restart nginx`"
+      correct: false
+      why: It restarts nginx on every run, dropping its connections each time. That is a change, every time.
+    - text: "`mkdir -p /opt/app`"
+      correct: true
+      why: "The first run creates the directory; later runs succeed and change nothing. Even so, run through `ansible.builtin.shell` it reports `changed` every time, because Ansible cannot see inside a command. `ansible.builtin.file` with `state: directory` reports the truth."
+
+- id: what-is-ansible-5
+  type: choice
+  question: After the second run of the lesson's playbook, a colleague runs `chmod 700 /tmp/app` by hand. What does the third run report for the task "Ensure the app directory exists"?
+  options:
+    - text: "`ok`: the task succeeded last time, so Ansible does not check it again"
+      correct: false
+      why: Ansible keeps no record of earlier runs. It checks the node's real state every time.
+    - text: "`changed`: the module finds mode `0700` and sets `0755` again"
+      correct: true
+      why: Every run compares the real state with the declared one. The mode no longer matches, so the module fixes it and reports `changed`.
+    - text: "`ok`: the directory already exists, so there is nothing to create"
+      correct: false
+      why: The task declares the mode as well as the directory. Existence alone is not the full declared state.
+    - text: "`failed`: the node no longer matches the playbook, so Ansible stops for you to fix it by hand"
+      correct: false
+      why: A difference from the declared state is exactly what Ansible is there to fix. It changes the mode back and carries on.

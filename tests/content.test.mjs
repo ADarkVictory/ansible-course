@@ -114,3 +114,16 @@ test('every choice has exactly one correct option and every option explains why'
     });
   }
 });
+
+// Ansible output and the playbook that produced it are never typed into a lesson by hand: a code block right after
+// <!-- output: <stem> --> must equal tests/golden/<stem>.txt, one after <!-- fixture: <stem> --> tools/fixtures/<stem>.yml.
+test('lesson output and fixture blocks are copies of the real files, and no Ansible output appears without one', () => {
+  const norm = (s) => s.split('\n').map((l) => l.trimEnd()).join('\n').trim();
+  const from = { output: (n) => `tests/golden/${n}.txt`, fixture: (n) => `tools/fixtures/${n}.yml` };
+  for (const l of lessons) {
+    for (const [, kind, stem, body] of read(l.md).matchAll(/(?:<!--\s*(output|fixture):\s*(\S+?)\s*-->\s*)?```[^\n]*\n([\s\S]*?)```/g)) {
+      if (kind) assert.equal(norm(body), norm(read(from[kind](stem))), `${l.md}: block after ${kind}: ${stem} differs from ${from[kind](stem)}`);
+      else assert.doesNotMatch(body, /^(PLAY|TASK|RUNNING HANDLER) \[|^PLAY RECAP|^\S+ \| [A-Z]+|^\[(ERROR|WARNING)\]/m, `${l.md}: Ansible output without an output marker`);
+    }
+  }
+});

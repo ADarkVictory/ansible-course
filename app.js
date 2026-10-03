@@ -93,6 +93,8 @@ async function show(navigated) {
     const ex = byId.get(id);
     c.replaceWith(ex ? exercise(ex, () => lessonProgress(i, exercises)) : h('p', { className: 'notice' }, `Missing exercise: ${id}`));
   }
+  // ```output blocks are real Ansible output (tests/content.test.mjs): shown in the terminal pane, which wraps like the exercise output.
+  for (const code of article.querySelectorAll('pre > code.language-output')) code.parentElement.replaceWith(terminal(code.textContent));
   addTryIt(article);
   lessonProgress(i, exercises);
   renderPager(i);
@@ -248,7 +250,7 @@ const ini = (inv) => Object.entries(inv).map(([g, hosts]) =>
 function addTryIt(article) {
   const editors = [...article.querySelectorAll('.ex textarea, .ex input')];
   for (const pre of article.querySelectorAll('pre')) {
-    if (pre.closest('.ex')) continue;
+    if (pre.closest('.ex') || pre.classList.contains('term')) continue;
     const target = editors.find((ed) => pre.compareDocumentPosition(ed) & Node.DOCUMENT_POSITION_FOLLOWING);
     if (!target) continue;
     const lang = /language-(\S+)/.exec(pre.querySelector('code')?.className ?? '')?.[1] ?? '';
