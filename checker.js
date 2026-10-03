@@ -98,6 +98,7 @@ function parse(src, registry, kw) {
         // ponytail: block/rescue/always arrive with module 5; until then a block is an unresolved action 'block'.
         const task = parseTask(t, tnode, list === 'handlers', registry, kw, err, at, ctx);
         if (task.error) return task;
+        [task.line, task.col] = lineCol(src, tnode.pos); // where output.js points a failed task's Origin
         play[list].push(task);
       }
     }
@@ -156,7 +157,8 @@ function parseTask(t, tnode, handler, registry, kw, err, at, ctx) {
   if (isMap(args)) args = { ...(isMap(extra) ? extra : {}), ...args };
   const keywords = Object.fromEntries(Object.entries(t).filter(([k]) => k !== 'name' && !cands.includes(k)));
   if ('local_action' in t) keywords.delegate_to = 'localhost';
-  const task = { ...('name' in t && { name: t.name }), module, args, keywords };
+  // action: the module as written, which Ansible's TASK banner shows for an unnamed task.
+  const task = { ...('name' in t && { name: t.name }), module, action: mod, args, keywords };
 
   // Legal = documented params and aliases plus what the real module accepted ("Supported parameters include" text).
   // The message names the module that actually ran, recorded per spelling in modules.yaml `reports_as`.
@@ -302,12 +304,12 @@ function openAt(src, pos) {
 }
 
 // ---- Ansible's error frame (_event_formatting.py, _error_utils.SourceContext) ------------------------------------
-function format(msg, ctx, help) {
+export function format(msg, ctx, help) {
   const s = [msg, ...(ctx === undefined ? [] : [ctx]), ...(help ? ['', help] : [])].join('\n').trim();
   return `[ERROR]: ${s}${s.includes('\n') ? '\n\n' : '\n'}`;
 }
 
-function excerpt(src, line, col) {
+export function excerpt(src, line, col) {
   const origin = `Origin: ${PATH}:${line}:${col}`;
   const lines = (src.match(/[^\n]*\n|[^\n]+$/g) ?? []).map((l) => l.replace(/\n$/, ''));
   const start = Math.max(0, line - 3);

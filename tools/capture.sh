@@ -4,7 +4,7 @@
 #   ansible-playbook -i tools/fixtures/inventory.ini /home/student/playbook.yml   (every fixture but adhoc-ping)
 #   ansible web -i tools/fixtures/inventory.ini -m ansible.builtin.ping           (adhoc-ping)
 # ANSIBLE_FORKS=1 keeps host order deterministic (web1 before web2); default forks=5 races.
-# run-sample-second is run-sample.yml run a second time with no cleanup in between.
+# <name>-second is <name>.yml run a second time with no cleanup in between.
 # Needs: uv, python3.13, and a writable /home/student (CI: sudo mkdir -p /home/student && sudo chown $USER /home/student).
 set -u
 root=$(cd "$(dirname "$0")/.." && pwd)
@@ -23,9 +23,9 @@ cd /home/student || exit 1
 
 for f in yaml-indent yaml-tab empty not-a-list unknown-module unsupported-param unknown-play-keyword task-keyword-typo \
          yaml-colon yaml-unclosed-quote yaml-dedent yaml-mapping-values no-action task-not-a-dict hosts-missing \
-         run-sample run-sample-second run-no-facts adhoc-ping; do
+         run-sample run-sample-second run-no-facts run-idempotency run-idempotency-second adhoc-ping; do
   src=${f%-second}
-  [ "$f" = run-sample-second ] || rm -rf /tmp/web1 /tmp/web2   # fresh hosts; the second run must see the first run's state
+  [ "$src" != "$f" ] || rm -rf /tmp/web1 /tmp/web2   # fresh hosts; the second run must see the first run's state
   if [ "$f" = adhoc-ping ]; then
     ansible web -i "$inv" -m ansible.builtin.ping > "$out/$f.txt" 2>&1
   else
