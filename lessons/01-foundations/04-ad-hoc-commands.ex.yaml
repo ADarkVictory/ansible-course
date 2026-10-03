@@ -1,0 +1,159 @@
+- id: ad-hoc-commands-1
+  type: command
+  task: The network team changed the firewall in front of the database servers. Check that Ansible can still log in to every database server and run a module there.
+  inventory: &inv
+    web: [web1, web2, web3]
+    db: [db1, db2]
+    lb: [lb1]
+    prod: [web1, web2, db1, lb1]
+    staging: [web3, db2]
+  solution: ansible db -m ping
+  checks:
+    - module: ping
+      hint: -m picks the module and -a only passes it arguments. Which module logs in and answers pong?
+    - hosts: [db1, db2]
+      hint: The pattern right after ansible picks the hosts. Name the database group.
+  wrong:
+    - code: ansible db -a ping
+      fails: 1
+    - code: ansible all -m ping
+      fails: 2
+    - code: ansible db1 -m ping
+      fails: 2
+
+- id: ad-hoc-commands-2
+  type: command
+  task: Is nginx listening on port 443 on every web server? The check is `ss -tln | grep :443`. Run it on the `web` group.
+  inventory: *inv
+  stdout: "LISTEN 0      511          0.0.0.0:443        0.0.0.0:*"
+  solution: ansible web -m shell -a 'ss -tln | grep :443'
+  checks:
+    - module: shell
+      hint: Without a shell, |, grep and :443 reach ss as three more arguments. Which module runs the line through a shell?
+    - args: { _raw_params: "ss -tln | grep :443" }
+      hint: Pass the check exactly as given, as one argument in single quotes after -a.
+    - hosts: [web1, web2, web3]
+      hint: Run it on the web group.
+  wrong:
+    - code: ansible web -a 'ss -tln | grep :443'
+      fails: 1
+    - code: ansible web -m command -a 'ss -tln | grep :443'
+      fails: 1
+    - code: ansible web -m shell -a 'ss -tln'
+      fails: 2
+    - code: ansible all -m shell -a 'ss -tln | grep :443'
+      fails: 3
+
+- id: ad-hoc-commands-3
+  type: command
+  task: How much disk space does PostgreSQL use on the database servers? Its data directory, `/var/lib/pgsql`, is readable only by `postgres` and root. Your login user has sudo rights without a password. Run `du -sh /var/lib/pgsql` on the `db` group.
+  inventory: *inv
+  stdout: "4.2G\t/var/lib/pgsql"
+  solution: ansible db -b -a 'du -sh /var/lib/pgsql'
+  checks:
+    - args: { _raw_params: du -sh /var/lib/pgsql }
+      hint: Run exactly du -sh /var/lib/pgsql, in single quotes after -a.
+    - hosts: [db1, db2]
+      hint: Run it on the db group.
+    - flags: { become: true }
+      hint: Your login user cannot read /var/lib/pgsql. Which option runs the command through sudo?
+  wrong:
+    - code: ansible db -a 'du -sh /var/lib/pgsql'
+      fails: 3
+    - code: ansible db -K -a 'du -sh /var/lib/pgsql'
+      fails: 3
+    - code: ansible db --become-user postgres -a 'du -sh /var/lib/pgsql'
+      fails: 3
+    - code: ansible db -b -a 'du -sh /var/lib'
+      fails: 1
+
+- id: ad-hoc-commands-4
+  type: command
+  task: Ping only the web servers that are in production.
+  inventory: *inv
+  solution: ansible 'web:&prod' -m ping
+  checks:
+    - hosts: [web1, web2]
+      hint: You want hosts in web that are also in prod. Which symbol means "and also"?
+    - module: ping
+      hint: Use the ping module.
+  wrong:
+    - code: ansible 'web:prod' -m ping
+      fails: 1
+    - code: ansible prod -m ping
+      fails: 1
+    - code: ansible 'web:&prod' -a ping
+      fails: 2
+
+- id: ad-hoc-commands-5
+  type: command
+  task: Before a kernel update, check the uptime of every production host except the database servers. Run the `uptime` command.
+  inventory: *inv
+  stdout: " 09:41:07 up 63 days,  4:12,  1 user,  load average: 0.12, 0.08, 0.05"
+  solution: ansible 'prod:!db' -a uptime
+  checks:
+    - hosts: [web1, web2, lb1]
+      hint: Start from prod, then take db away. Which symbol excludes a group?
+    - args: { _raw_params: uptime }
+      hint: With no -m, -a is the command line to run.
+  wrong:
+    - code: ansible '!db' -a uptime
+      fails: 1
+    - code: ansible 'prod:db' -a uptime
+      fails: 1
+    - code: ansible 'db:!prod' -a uptime
+      fails: 1
+    - code: ansible 'prod:!db' -m ping
+      fails: 2
+
+- id: ad-hoc-commands-6
+  type: choice
+  question: At an interactive bash prompt, which command pings every production host except the database servers?
+  options:
+    - text: "`ansible \"prod:!db\" -m ping`"
+      correct: false
+      why: Double quotes do not stop history expansion. Bash replaces `!db` with your last command that starts with `db`, or stops with `event not found`.
+    - text: "`ansible prod -m ping --limit db`"
+      correct: false
+      why: "`--limit` keeps only the hosts that match both, so this pings `db1` alone: the opposite of what you wanted."
+    - text: "`ansible 'prod:!db' -m ping`"
+      correct: true
+      why: Inside single quotes bash changes nothing, so Ansible receives `prod:!db` and pings `web1`, `web2` and `lb1`.
+    - text: "`ansible prod:!db -m ping`"
+      correct: false
+      why: Unquoted, `!db` is history expansion just as in double quotes. Bash never passes `prod:!db` to Ansible.
+
+- id: ad-hoc-commands-7
+  type: command
+  task: Before you run the runbook command above, see which hosts it would restart nginx on when limited to staging, without restarting anything.
+  inventory: *inv
+  solution: ansible web -b -m systemd_service -a 'name=nginx state=restarted' --limit staging --list-hosts
+  checks:
+    - hosts: [web3]
+      hint: Keep the pattern web and narrow it with --limit staging. Only hosts in both remain.
+    - flags: { list-hosts: true }
+      hint: Add the option that prints the hosts and runs nothing.
+  wrong:
+    - code: ansible web -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
+      fails: 1
+    - code: ansible staging -b -m systemd_service -a 'name=nginx state=restarted' --list-hosts
+      fails: 1
+    - code: ansible web -b -m systemd_service -a 'name=nginx state=restarted' --limit staging
+      fails: 2
+
+- id: ad-hoc-commands-8
+  type: choice
+  question: Which of these belongs in a playbook rather than an ad-hoc command?
+  options:
+    - text: Before a patch window, checking which web servers still have an old `openssl`
+      correct: false
+      why: A read-only check is what ad-hoc commands are for, here `ansible web -a 'rpm -q openssl'`. Nothing changes, so there is nothing to record.
+    - text: Restarting a hung nginx on one staging server
+      correct: false
+      why: A one-off action that leaves no state behind is fine ad hoc, with `--limit` so it reaches only that server.
+    - text: Setting `vm.swappiness = 10` on every database server
+      correct: true
+      why: It is a setting that must stay true. Done ad hoc, nothing records it, and every database server built later lacks it. In a playbook it is reviewed, versioned and applied to new servers too.
+    - text: Checking that every host still answers after a firewall change
+      correct: false
+      why: "`ansible all -m ping` answers that in seconds and changes nothing."

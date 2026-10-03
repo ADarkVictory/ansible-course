@@ -263,3 +263,14 @@ test('command and shell: a failed check shows no output, as the exercise stdout 
   assert.deepEqual(run("ansible web -a 'ss -tln | grep :443'", ex, checks), { ok: false, output: '', hint: 'Pipes need a shell.', failedCheck: 1 });
   assert.match(run("ansible web -m shell -a 'ss -tln | grep :443'", ex, checks).output, /^web1 \| CHANGED \| rc=0 >>\nLISTEN/);
 });
+
+test('the ad-hoc lesson: the engine prints what real ansible printed over its inventory (adhoc-lesson-*)', () => {
+  const inventory = { web: ['web1', 'web2', 'web3'], db: ['db1', 'db2'], lb: ['lb1'], prod: ['web1', 'web2', 'db1', 'lb1'], staging: ['web3', 'db2'] }; // tools/fixtures/inventory-adhoc.ini
+  for (const [stem, line, stdout] of [
+    ['adhoc-lesson-ping', 'ansible web -m ping'],
+    ['adhoc-lesson-command-pipe', "ansible web -a 'echo hello | tr a-z A-Z'", 'hello | tr a-z A-Z'],
+    ['adhoc-lesson-shell-pipe', "ansible web -m shell -a 'echo hello | tr a-z A-Z'", 'HELLO'],
+    ['adhoc-lesson-exclude', "ansible 'prod:!db' --list-hosts"],
+    ['adhoc-lesson-limit', 'ansible web -m ping --limit staging'],
+  ]) assert.equal(checkCommand({ id: 'x', type: 'command', inventory, stdout }, line, registry).output, golden(stem), stem);
+});

@@ -1,0 +1,6 @@
+web1 | CHANGED | rc=0 >>
+HELLO
+web2 | CHANGED | rc=0 >>
+HELLO
+web3 | CHANGED | rc=0 >>
+HELLO

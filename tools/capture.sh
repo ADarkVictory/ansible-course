@@ -5,6 +5,7 @@
 #   ansible web -i tools/fixtures/inventory.ini -m ansible.builtin.ping           (adhoc-ping)
 #   ansible-playbook -i tools/fixtures/inventory-multi.ini playbook.yml           (run-hosts-patterns)
 #   ansible <args> -i tools/fixtures/inventory-multi.ini                          (adhoc-*, see the adhoc calls below)
+#   ansible <args> -i tools/fixtures/inventory-adhoc.ini -c local                 (adhoc-lesson-*, see the lesson calls below)
 #   list-hosts.json: ansible <pattern> --list-hosts over inventory-multi.ini      (tools/gen-hosts.py)
 #   ansible-inventory -i inventory.yml --graph                                    (inv-*: the fixture as /home/student/inventory.yml)
 #   ansible-inventory -i inventory.ini --graph                                    (inventory-lesson: the INI fixture)
@@ -71,6 +72,15 @@ adhoc adhoc-unsupported-param-redirect web -m systemd -a 'name=x bogus=1'
 adhoc adhoc-limit 'web:db' -m ping --limit prod
 adhoc adhoc-limit-empty web -m ping --limit db
 adhoc adhoc-limit-unmatched nosuch -m ping --limit nosuch
+# Ad-hoc lesson (adhoc-lesson-*): `ansible <args> -i inventory.ini` over the lesson's inventory, tools/fixtures/inventory-adhoc.ini. It holds
+# no connection variables because the lesson shows it, so -c local and -e give every host the local connection and Python instead.
+invl="$root/tools/fixtures/inventory-adhoc.ini"
+lesson() { f=$1; shift; ansible "$@" -i "$invl" -c local -e 'ansible_python_interpreter={{ ansible_playbook_python }}' > "$out/$f.txt" 2>&1 < /dev/null; }
+lesson adhoc-lesson-ping web -m ping
+lesson adhoc-lesson-command-pipe web -a 'echo hello | tr a-z A-Z'
+lesson adhoc-lesson-shell-pipe web -m shell -a 'echo hello | tr a-z A-Z'
+lesson adhoc-lesson-exclude 'prod:!db' --list-hosts
+lesson adhoc-lesson-limit web -m ping --limit staging
 # Inventory exercises: what the learner's inventory.yml makes ansible-inventory print (stdout and stderr together).
 for src in "$root"/tools/fixtures/inv-*.yml; do
   f=$(basename "$src" .yml)

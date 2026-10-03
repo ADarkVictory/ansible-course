@@ -8,3 +8,5 @@ modules:
         title: Inventories
       - file: 03-ansible-cfg
         title: ansible.cfg
+      - file: 04-ad-hoc-commands
+        title: Ad-hoc commands
