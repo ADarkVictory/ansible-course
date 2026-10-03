@@ -63,6 +63,7 @@ web3 | SUCCESS => {
 
 - `ping` is not ICMP. Ansible logs in over SSH and runs a small Python module that answers `pong`. `SUCCESS` proves that login and Python work, which every other module needs.
 - After `=>` comes the module's result, as JSON. `"changed": false`: ping changes nothing.
+- On real hosts whose inventory does not set `ansible_python_interpreter`, the result also carries `ansible_facts.discovered_interpreter_python`: the Python that Ansible found on the node.
 - A host Ansible cannot log in to is reported `UNREACHABLE!` instead.
 
 <!-- exercise: ad-hoc-commands-1 -->
@@ -104,7 +105,7 @@ HELLO
 ```
 
 - `rc=0` is the exit code; the command's output follows `>>`.
-- Both modules always report `CHANGED` (lesson 1).
+- When the command runs and exits 0, both modules report `CHANGED`, whatever it did (lesson 1). A non-zero exit code is reported `FAILED`.
 - Use `shell` only for what needs a shell: pipes, redirects, wildcards, `;` and `&&`.
 
 <!-- exercise: ad-hoc-commands-2 -->
