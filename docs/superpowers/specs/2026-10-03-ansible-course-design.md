@@ -19,15 +19,22 @@ Plain static files. The browser fetches lesson Markdown and exercise YAML at run
 
 ```
 index.html              shell: top bar, syllabus drawer, lesson view
-app.js                  hash router, lesson loading/rendering, progress
-checker.js              pure ES module: check(exercise, input) → { ok, output, hint }
+app.js                  hash router, lesson loading/rendering, progress (the only file that touches the DOM)
+checker.js              pure ES module: parsePlaybook, parseInventory, parseCommand, checkWrite, checkCommand
+                        (checkWrite and checkCommand → { ok, output, hint?, failedCheck? })
+output.js               pure ES module: render, renderAdhoc, renderGraph, resolveHosts (Ansible's output for a run)
+ui.js                   DOM-free helpers for app.js (routes, key bar, progress storage)
 style.css
 course.yaml             syllabus: ordered modules → lessons
-modules.yaml            registry of modules the course uses and their valid parameters
+modules.yaml            generated: modules the course simulates, their parameters, choices and argument checks
+keywords.yaml           generated: play and task keywords, reserved variable names
 lessons/<NN-module>/<NN-lesson>.md        lesson text
 lessons/<NN-module>/<NN-lesson>.ex.yaml   lesson exercises
 vendor/js-yaml.mjs, vendor/marked.esm.js  vendored, MIT, shared by site and tests
 tests/*.test.mjs        node --test suites
+tests/golden/           real ansible-core output; also served to the site for `output_golden`
+tools/                  capture.sh (goldens), gen-modules.py (modules.yaml, keywords.yaml), extract-solutions.mjs,
+                        fixtures/ (the playbooks, inventories and ansible.cfg the goldens come from)
 .github/workflows/ci.yml
 ```
 
@@ -65,35 +72,47 @@ tests/*.test.mjs        node --test suites
       hint: The template task never tells anything to restart.
     - handler: { name: Restart nginx, module: ansible.builtin.systemd_service }
       has: { state: restarted }
+      hint: The handler must restart nginx.
   wrong:                       # test-only: typical mistakes and the check they must fail
     - code: |
         …
-      fails: 1                 # 1-based index into checks
+      fails: 1                 # 1-based index into checks; or fqcn, error, hint (below)
+  right:                       # test-only: other correct answers; they must pass, and CI lints them
+    - |
+      …
 ```
 
-`choice` exercises carry `question`, optional `code`, and `options: [{ text, correct, why }]`.
-`command` exercises carry `checks` over the parsed command (program, module, flags, args) and an `output` block shown on success.
+- Every check carries a non-empty `hint`.
+- `fails`: the 1-based check index; `fqcn` for the FQCN rule; `error` for input real Ansible stops on (its `[ERROR]` is the feedback, with no hint); `hint` for what the course does not simulate (its hint, with no output).
+- `fqcn: true` requires every module named by FQCN (a runtime redirect such as `ansible.builtin.yum` fails it); `fqcn_hint` is the feedback, with a built-in default. The FQCN rule runs before the checks.
+- `write` with `kind: inventory`: the learner writes the inventory, so there is no `inventory` key. Checks are `{ group, hosts?, children?, hint }`: the group is reachable from `all` and directly holds exactly those hosts and child groups, compared as sets; a key left out means none.
+- `command`: checks are any of `program`, `pattern`, `hosts` (the hosts the pattern and `--limit` select, in any order), `module`, `args`, `flags` (long option names), plus `hint`. `inventory` is required except for `ansible-doc`, which reads none. `stdout` is what a `command` or `shell` module prints on each host. `output_golden: <stem>` shows `tests/golden/<stem>.txt` on success, for output the engine does not render (`ansible-doc`). `wrong` entries use `code` too.
+- `choice`: `question`, optional `code`, and `options: [{ text, correct, why }]`; each option's `why` is its feedback.
 
 ### 3.3 Check pipeline (`write`)
 
 Stops at the first failure.
 
 1. **YAML parse** (js-yaml). On error: Ansible's own syntax-error text with file, line, column and the `^ here` marker.
-2. **Structure** against `modules.yaml`: unknown module → `couldn't resolve module/action '…'`; bad parameter → `Unsupported parameters for (…) module: …`; unknown play/task keyword → Ansible's corresponding error. Short module names resolve to `ansible.builtin.*` unless an exercise requires FQCN.
+2. **Structure** against `modules.yaml`: unknown module → `couldn't resolve module/action '…'`; bad arguments → the module's own failure, in ansible-core's order (mutually exclusive, required, choices, required_one_of/if/by, unsupported parameters), or the action plugin's for `copy` and `template`; unknown play/task keyword → Ansible's corresponding error. Short module names resolve to `ansible.builtin.*` unless an exercise requires FQCN. A real keyword or module the course does not model yet, or a template beyond `{{ name }}` of a play or task variable, gets a course hint ("This course doesn't simulate `when` yet."), never an invented error or a plain run.
 3. **Exercise checks**, in order. The first failing check's `hint` is shown. Check vocabulary, extended only when a lesson needs it:
    - `play`: the play has the given keys/values.
    - `task` / `handler`: a task matching `{ module, name? }` exists, optionally with `has` parameters/keywords.
    - `forbid`: no task matches (for example `shell`/`command` where a module exists; plain-text secrets).
 4. **Success output**, generated from the learner's playbook and the exercise inventory: `PLAY [...]`, `TASK [Gathering Facts]` (unless `gather_facts: false`), one `TASK [...]` per task with `changed:` per host, handlers under `RUNNING HANDLER`, then `PLAY RECAP`.
-   - **Run again** renders the second run: modules report `ok`; bare `command`/`shell` still report `changed` unless `creates`, `removes` or `changed_when` is set; handlers do not fire.
+   - **Run again** renders the second run of the playbook that passed: modules report `ok`; bare `command`/`shell` still report `changed` unless `creates`, `removes` or `changed_when` is set; handlers fire only when a notifying task changes.
 
 ### 3.4 Help
 
-The first failure shows the hint. After three failed attempts a **Show solution** button appears; using it is recorded in progress.
+The first failure shows the hint. After three failed attempts a **Show solution** button appears; using it is recorded in progress. A real Ansible `[ERROR]` shows no extra hint: the error is the feedback. `choice` exercises have no Show solution: each tapped option shows its `why`.
 
 ### 3.5 Error-text authenticity
 
-Every simulated error message is taken from a real `ansible-core` run, not paraphrased.
+Every simulated error message is taken from a real `ansible-core` run, not paraphrased. Exceptions:
+
+- YAML errors outside the captured kinds keep Ansible's frame around js-yaml's reason.
+- Whatever the course does not simulate shows a course hint, not Ansible text.
+- A command exercise's `stdout` is hand-written host output inside Ansible's real frame.
 
 ## 4. Mobile lesson format
 
@@ -135,6 +154,8 @@ Build order: engine and module 1 first, then one module at a time. The course is
 
 - Every `write`/`command` solution passes all checks.
 - Every `wrong` entry fails at exactly its `fails` check.
+- Every `write`/`command` exercise has at least one `wrong` entry; every lesson has at least three exercises.
+- Lesson `output`/`fixture` blocks equal their golden or fixture; no other lesson or exercise text looks like Ansible output.
 - Every `choice` exercise has exactly one correct option, and every option has a `why`.
 - Every lesson in `course.yaml` has its `.md`; every `.ex.yaml` parses; exercise ids are unique.
 - Output generator: unit tests for first run, second run (idempotency), handlers, `gather_facts: false`.
@@ -142,7 +163,9 @@ Build order: engine and module 1 first, then one module at a time. The course is
 ### CI (GitHub Actions, on push and pull request)
 
 1. `node --test`
-2. Install `ansible-core` and `ansible-lint`. Write each `write` solution to a file and run `ansible-playbook --syntax-check` and `ansible-lint` on it. A solution that real Ansible rejects fails the build.
+2. Install `ansible-core` and `ansible-lint`. Regenerate the goldens, `modules.yaml` and `keywords.yaml` from real ansible-core and fail on any drift.
+3. Write each `write` solution and `right` entry to a file and run `ansible-playbook --syntax-check` and `ansible-lint` (production profile, `.ansible-lint`) on it. A solution that real Ansible rejects fails the build.
+4. Parse each inventory solution with `ansible-inventory --list`; any stderr output fails the build.
 
 ## 7. Delivery
 

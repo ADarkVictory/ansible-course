@@ -31,21 +31,15 @@ python3.13 -m venv .venv
 .venv/bin/pip install ansible-core==2.21.4 ansible-lint==26.9.0
 sudo mkdir -p /home/student && sudo chown "$USER" /home/student   # the simulated file paths live here
 export PATH="$PWD/.venv/bin:$PATH"
-
-tools/capture.sh                     # rewrites tests/golden/ from real ansible-core, runs gen-hosts.py and gen-kv.py
-python tools/gen-modules.py          # rewrites modules.yaml and keywords.yaml
-git diff --exit-code tests/golden modules.yaml keywords.yaml
-
-node tools/extract-solutions.mjs     # writes every solution to build/solutions and build/inventories
-for f in build/solutions/*.yml; do ansible-playbook --syntax-check -i web1,web2, "$f" && ansible-lint "$f"; done
-for f in build/inventories/*.yml; do ansible-inventory -i "$f" --list >/dev/null; done   # CI also fails on any stderr
 ```
 
-The drift check is the `git diff --exit-code`: after regenerating, any difference from the committed files means the simulated course no longer matches real ansible-core, so the change is a bug in the engine, the lesson or the fixtures. Commit regenerated files only when the drift is understood. Without an environment, `tools/capture.sh` makes `.venv` itself with `uv`.
+Then run the `run:` steps of the `ansible` job in `.github/workflows/ci.yml`.
+
+The drift check is its `git diff --exit-code`: after regenerating, any difference from the committed files means the simulated course no longer matches real ansible-core, so the change is a bug in the engine, the lesson or the fixtures. Commit regenerated files only when the drift is understood.
 
 ## Publish
 
-1. Make the repository public. GitHub Pages serves private repositories only on paid plans.
+1. Make the repository public, or use a paid plan: GitHub Pages serves private repositories only on paid plans.
 2. Settings → Pages → Deploy from a branch → `main` / root.
 3. The site is then at <https://adarkvictory.github.io/ansible-course/>.
 
@@ -60,13 +54,14 @@ Add a lesson as `lessons/<NN-module>/<NN-lesson>.md` plus `<NN-lesson>.ex.yaml`,
 ### Accuracy
 
 - Every claim about Ansible must hold for ansible-core 2.21.4. Verify against the real thing (`ansible-doc`, `ansible-config`, the source), not memory.
-- Every output or error a learner sees comes from the engine or a captured golden. Never paste output by hand, including in prose.
+- Every output or error a learner sees comes from the engine or a captured golden. Never paste output by hand, including in prose. The one exception is a command exercise's `stdout`: the host's own output inside Ansible's real frame.
+- What the engine does not model (a keyword, a module, a template beyond `{{ name }}`) gets a course hint such as "This course doesn't simulate `when` yet.", never Ansible text the engine made up.
 - Simulated errors name `/home/student/playbook.yml` (inventory exercises: `/home/student/inventory.yml`).
 - A short module name resolves to `ansible.builtin.<name>` unless the exercise sets `fqcn: true`.
 
 ### Lesson text
 
-Short paragraphs, H2 sections, one idea per section, code blocks for YAML and commands. Explain every term before an exercise uses it. Read, see, do: an exercise every few minutes, at least three per lesson. Place each exercise with `<!-- exercise: <id> -->`, exactly once. Ids are `<lesson-slug>-<n>`, unique course-wide.
+Short paragraphs, H2 sections, one idea per section, code blocks for YAML (` ```yaml `) and commands (` ```bash `; those two get a Try it button). If a sentence does not teach, cut it. Explain every term before an exercise uses it. Read, see, do: an exercise every few minutes, at least three per lesson (the tests enforce it). Place each exercise with `<!-- exercise: <id> -->`, exactly once. Ids are `<lesson-slug>-<n>`, unique course-wide.
 
 ### Output and fixture markers
 
@@ -82,10 +77,10 @@ Each `.ex.yaml` is a list. Common keys: `id`, `type` (`choice`, `write` or `comm
 
 **`write`**: the learner writes a playbook.
 - `task`, `starter`, `solution`, `inventory` (`{ group: [hosts] }`, the hosts the simulated run uses)
-- `checks`, each with one of `play`, `task`, `handler` or `forbid`, plus optional `has`, and a `hint` that nudges without giving the answer. `task`, `handler` and `forbid` take `{ module, name? }` (short names mean `ansible.builtin`). `has` lists parameters or keywords the task must carry (`forbid` plus `has` forbids that combination). `play` takes the keywords the play must carry.
+- `checks`, each with one of `play`, `task`, `handler` or `forbid`, plus optional `has`, and a non-empty `hint` (required; the tests enforce it) that nudges without giving the answer. `task`, `handler` and `forbid` take `{ module, name? }` (short names mean `ansible.builtin`). `has` lists parameters or keywords the task must carry, by their canonical names (`forbid` plus `has` forbids that combination); the free-form text of `command` and `shell` is `_raw_params`, and `mode` is a quoted octal string such as `"0644"`. `play` takes the keywords the play must carry.
 - `fqcn: true` requires every module to be an FQCN, with `fqcn_hint` as the feedback. It runs before the checks, and a runtime redirect such as `ansible.builtin.yum` counts as a failure.
 
-**`write` with `kind: inventory`**: the learner writes `/home/student/inventory.yml`. No `inventory` key. Each check is `{ group, hosts?, children?, hint }`: the group must be reachable from `all` and directly hold exactly those hosts and child groups. An inventory Ansible warns about never passes.
+**`write` with `kind: inventory`**: the learner writes `/home/student/inventory.yml`. No `inventory` key. Each check is `{ group, hosts?, children?, hint }`: the group must be reachable from `all` and directly hold exactly those hosts and child groups; leaving `hosts` or `children` out means none. An inventory Ansible warns about never passes.
 
 **`command`**: the learner types an `ansible` or `ansible-doc` line.
 - `task`, `solution`, `inventory` (not for `ansible-doc`, which reads none).
@@ -93,7 +88,7 @@ Each `.ex.yaml` is a list. Common keys: `id`, `type` (`choice`, `write` or `comm
 - `stdout`: what a `command` or `shell` module prints on each host. `output_golden: <stem>`: show `tests/golden/<stem>.txt`, for what the engine cannot render (`ansible-doc`).
 
 **Test-only keys**, never shown to the learner:
-- `wrong`: a list of `{ code, fails }` mistakes. `fails` is the 1-based index of the check that must catch it, `fqcn` for the FQCN rule, or `error` for a playbook on which real Ansible stops (its `[ERROR]` is the feedback, with no hint). Every `write` and `command` exercise has at least one `wrong`.
+- `wrong`: a list of `{ code, fails }` mistakes. `fails` is the 1-based index of the check that must catch it, `fqcn` for the FQCN rule, `error` for a playbook or command on which real Ansible stops (its `[ERROR]` is the feedback, with no hint), or `hint` for what the course does not simulate (its hint, with no output). Every `write` and `command` exercise has at least one `wrong` (the tests enforce it).
 - `right`: other correct answers that real Ansible and ansible-lint accept. They must pass the checks. Use for alternative spellings, such as `k=v` arguments or parameter aliases.
 
 The UI gives the hint after the first failed attempt and **Show solution** after three.
@@ -102,19 +97,15 @@ The UI gives the hint after the first failed attempt and **Show solution** after
 
 Every `write` solution and `right` entry must pass `ansible-playbook --syntax-check` and `ansible-lint` (production profile: FQCN, every play and task named). Inventory solutions must parse with `ansible-inventory` without a warning. CI checks all of them.
 
-### Ponytail
-
-Lessons are concise: if a sentence does not teach, cut it. Code and prose take the laziest solution that works (see `CLAUDE.md`). That never cuts exercise correctness: every exercise keeps its reference solution and its `wrong` answers.
-
 ## Layout
 
 - `index.html`, `style.css`: the single page and its styles.
 - `app.js`: router, lesson rendering, exercise UI, progress in `localStorage`. The only file that touches the DOM.
 - `ui.js`: DOM-free helpers for `app.js` (route parsing and the like), so Node can test them.
-- `checker.js`: parses and checks learner input (`write`, `command`, `choice`, inventory). Pure, runs in Node.
+- `checker.js`: parses and checks learner input (`write`, `command`, inventory; `app.js` checks `choice` itself). Pure, runs in Node.
 - `output.js`: renders Ansible's output for a run. Pure, runs in Node.
 - `course.yaml`: syllabus, the ordered modules and lessons.
-- `modules.yaml`, `keywords.yaml`: modules, parameters and keywords the simulator accepts, generated by `tools/gen-modules.py`.
+- `modules.yaml`, `keywords.yaml`: modules, their parameters and argument checks, play and task keywords and reserved variable names, generated from ansible-core by `tools/gen-modules.py`.
 - `lessons/<NN-module>/`: lesson `.md` and `.ex.yaml` files.
 - `vendor/`: vendored `js-yaml` and `marked` (licences in `vendor/LICENSES.md`).
 - `tests/`: `node --test` suites; `tests/golden/` holds real Ansible output.
@@ -122,5 +113,4 @@ Lessons are concise: if a sentence does not teach, cut it. Code and prose take t
 - `docs/superpowers/`: design spec and implementation plan.
 - `.github/workflows/ci.yml`: CI (`npm test`; regenerate-and-drift check; solution lint).
 - `CLAUDE.md`, `.claude/`: working rules and skills for Claude Code.
-- `package.json`: only `"type": "module"` and the test script.
-- `build/`, `.venv/`, `.ansible/`: git-ignored, generated locally.
+- `.ansible-lint`: the production profile every solution must pass.
