@@ -14,6 +14,10 @@ test('indent adds two spaces at the start of the line and moves the cursor with 
   assert.deepEqual(applyKey('a: 1\nb: 2', 7, 7, 'indent'), { text: 'a: 1\n  b: 2', cursor: 9 });
 });
 
+test('indent at the very start of the text indents the first line, even when it is empty', () => {
+  assert.deepEqual(applyKey('\nb', 0, 0, 'indent'), { text: '  \nb', cursor: 2 });
+});
+
 test('indent indents every line of a multi-line selection', () => {
   assert.deepEqual(applyKey('a\nb\nc\nd', 2, 5, 'indent'), { text: 'a\n  b\n  c\nd', cursor: 9 });
 });

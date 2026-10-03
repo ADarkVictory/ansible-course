@@ -137,10 +137,6 @@ main:focus { outline: none; }
 #lesson h1 { font-size: 1.85rem; line-height: 1.2; margin: 1.2rem 0 1rem; letter-spacing: -0.01em; }
 #lesson h2 { font-size: 1.35rem; line-height: 1.3; margin: 2.2rem 0 0.6rem; }
 #lesson h3 { font-size: 1.1rem; margin: 1.6rem 0 0.4rem; }
-#lesson img { max-width: 100%; height: auto; }
-#lesson table { display: block; overflow-x: auto; border-collapse: collapse; }
-#lesson th, #lesson td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
-blockquote { margin: 1rem 0; padding: 2px 16px; border-left: 3px solid var(--border-strong); color: var(--muted); }
 
 code { font-family: var(--mono); font-size: 0.88em; }
 :not(pre) > code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; overflow-wrap: anywhere; }

@@ -13,7 +13,7 @@ export function parseRoute(hash) {
  */
 export function applyKey(text, start, end, key) {
   if (key === 'indent' || key === 'outdent') {
-    const from = text.lastIndexOf('\n', start - 1) + 1;
+    const from = start ? text.lastIndexOf('\n', start - 1) + 1 : 0;
     const lines = text.slice(from, end).split('\n').length;
     const rest = text.slice(from).split('\n');
     let cursor = end, lineStart = from;

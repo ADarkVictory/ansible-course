@@ -65,6 +65,8 @@ async function show(navigated) {
   const article = $('lesson');
   if (i < 0) {
     article.replaceChildren(failed('There is no lesson at this address.'));
+    $('top-title').textContent = 'Ansible course';
+    $('top-progress').textContent = '';
     $('pager').replaceChildren();
     renderToc();
     return;
@@ -172,16 +174,18 @@ function attempt(ex, box, markDone, rec) {
   if (ex.inventory && !writesInventory) box.append(h('p', { className: 'label' }, 'Inventory'), h('pre', { className: 'inv' }, h('code', { textContent: ini(ex.inventory) })));
   const result = h('div', { className: 'result', 'aria-live': 'polite' });
   const help = h('div', { className: 'help' });
-  let fails = 0, field;
+  // Show solution appears after three failures; once used, the first failure after a reload brings it back.
+  let fails = progress.ex[ex.id]?.solutionShown ? 3 : 0, field;
 
-  const report = (r, again) => {
+  // code: what ran, so Run again runs the same playbook a second time even if the editor changed since.
+  const report = (r, code, again) => {
     result.replaceChildren(...[
       h('p', { className: `verdict ${r.ok ? 'ok' : 'bad'}` }, r.ok ? (again ? '✓ Second run' : '✓ Correct') : '✗ Not yet'),
       !r.ok && r.hint && h('p', { className: 'hint' }, h('strong', {}, 'Hint: '), r.hint),
       r.output && terminal(r.output),
       r.ok && ex.type === 'write' && !writesInventory && h('div', { className: 'again' },
-        h('button', { type: 'button', className: 'secondary', onclick: () => report(checkWrite(ex, field.value, registry, keywords, { second: true }), true) }, 'Run again'),
-        h('span', { className: 'muted' }, 'See what a second run changes.')),
+        h('button', { type: 'button', className: 'secondary', onclick: () => report(checkWrite(ex, code, registry, keywords, { second: true }), code, true) }, 'Run again'),
+        h('span', { className: 'muted' }, 'See what a second run of it changes.')),
     ].filter(Boolean));
     if (r.ok) markDone();
     else if (++fails >= 3 && !help.hasChildNodes()) {
@@ -201,6 +205,7 @@ function attempt(ex, box, markDone, rec) {
   const plain = (e) => { for (const k of ['autocapitalize', 'autocomplete', 'autocorrect']) e.setAttribute(k, 'off'); e.setAttribute('spellcheck', 'false'); return e; };
   if (ex.type === 'write') {
     field = plain(h('textarea', { value: saved ?? ex.starter ?? '', wrap: 'off', 'aria-label': writesInventory ? 'Inventory editor' : 'Playbook editor' }));
+    field.dataset.starter = ex.starter ?? '';
     const gutter = h('pre', { className: 'gutter', 'aria-hidden': 'true' });
     // The textarea never scrolls vertically: it is as tall as its lines, so the gutter's numbers stay level with them.
     const fit = () => {
@@ -223,7 +228,7 @@ function attempt(ex, box, markDone, rec) {
     }, label));
     const run = h('button', { type: 'button', className: 'run', onclick: () => {
       if (document.activeElement === field) field.blur(); // close the on-screen keyboard so the output is visible
-      report(checkWrite(ex, field.value, registry, keywords));
+      report(checkWrite(ex, field.value, registry, keywords), field.value);
     } }, 'Run');
     box.append(h('div', { className: 'editor' }, gutter, field), h('div', { className: 'bar' }, h('div', { className: 'keys' }, ...keys), run));
   } else {
@@ -232,7 +237,7 @@ function attempt(ex, box, markDone, rec) {
     box.append(h('form', { className: 'cmd', onsubmit: (e) => {
       e.preventDefault();
       field.blur();
-      report(checkCommand(ex, field.value, registry));
+      report(checkCommand(ex, field.value, registry), field.value);
     } }, h('span', { className: 'prompt', 'aria-hidden': 'true' }, '$'), field, h('button', { className: 'run' }, 'Run')));
   }
   box.append(result, help);
@@ -243,23 +248,27 @@ function attempt(ex, box, markDone, rec) {
 const terminal = (text) => h('pre', { className: 'term' },
   ...text.split('\n').flatMap((line, i) => [i ? '\n' : null, isBanner(line) ? h('span', { className: 'banner' }, line) : line]));
 
-// The engine's inventories are { group: [hosts] }; shown as the INI file the lessons teach.
-const ini = (inv) => Object.entries(inv).map(([g, hosts]) =>
-  Array.isArray(hosts) ? `[${g}]\n${hosts.join('\n')}` : yaml.dump({ [g]: hosts }).trimEnd()).join('\n\n');
+// The engine's inventories are { group: [hosts] } (a `<group>:children` key lists groups); shown as the INI file the lessons teach.
+const ini = (inv) => Object.entries(inv).map(([g, hosts]) => `[${g}]\n${hosts.join('\n')}`).join('\n\n');
 
-// Each lesson code block followed by an exercise gets a Try it button that copies it into the next editor below.
+// A runnable lesson block (bash for a command box, yaml for an editor) gets a Try it button when the next editor below takes it.
 function addTryIt(article) {
   const editors = [...article.querySelectorAll('.ex textarea, .ex input')];
   for (const pre of article.querySelectorAll('pre')) {
     if (pre.closest('.ex') || pre.classList.contains('term')) continue;
-    const target = editors.find((ed) => pre.compareDocumentPosition(ed) & Node.DOCUMENT_POSITION_FOLLOWING);
-    if (!target) continue;
+    const next = editors.find((ed) => pre.compareDocumentPosition(ed) & Node.DOCUMENT_POSITION_FOLLOWING);
     const lang = /language-(\S+)/.exec(pre.querySelector('code')?.className ?? '')?.[1] ?? '';
+    const target = next?.tagName === { bash: 'INPUT', yaml: 'TEXTAREA' }[lang] ? next : undefined;
+    if (!target) continue;
     pre.before(h('div', { className: 'code-head' }, h('span', {}, lang), h('button', {
       type: 'button', className: 'try', 'aria-label': 'Try it in the exercise below',
       onclick: () => {
         const code = pre.textContent.trim();
-        target.value = target.tagName === 'INPUT' ? code.split('\n')[0].replace(/^\$\s*/, '') : code;
+        const value = target.tagName === 'INPUT' ? code.split('\n')[0].replace(/^\$\s*/, '') : code;
+        // Never lose what the learner wrote without asking.
+        const edited = target.value.trim() && target.value !== (target.dataset.starter ?? '') && target.value !== value;
+        if (edited && !confirm('Replace what you wrote with this example?')) return;
+        target.value = value;
         target.dispatchEvent(new Event('input'));
         target.closest('.ex').scrollIntoView({ behavior: 'smooth', block: 'start' });
       },
