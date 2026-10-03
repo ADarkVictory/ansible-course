@@ -10,7 +10,7 @@ root = Path(__file__).resolve().parent.parent
 doc = Path(sys.executable).parent / "ansible-doc"  # not resolved: keep the venv's bin dir
 
 # Args that get each module past required-arg checks so the real "Unsupported parameters" message appears.
-# package and service are absent on purpose: they delegate to a host-dependent backend (apt/dnf, systemd/service), so no fixed list exists.
+# package and service are absent: they delegate to a host-dependent backend, handled after the loop below.
 VALID = {
     "ping": {}, "apt": {}, "debug": {}, "setup": {},
     "command": {"cmd": "x"}, "shell": {"cmd": "x"},
@@ -46,4 +46,7 @@ for m in MODULES:
     }
     if m in VALID:
         out[fq]["supported"] = supported(m)
+# Simulated nodes are RHEL-family + systemd; the real text depends on the host's backend, so package borrows dnf's and service systemd_service's.
+for m, backend in (("package", "dnf"), ("service", "systemd_service")):
+    out["ansible.builtin." + m]["supported"] = out["ansible.builtin." + backend]["supported"]
 (root / "modules.yaml").write_text(yaml.safe_dump(out, sort_keys=False, width=1000))
