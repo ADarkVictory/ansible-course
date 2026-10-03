@@ -10,6 +10,7 @@
 #   ansible-inventory -i inventory.yml --graph                                    (inv-*: the fixture as /home/student/inventory.yml)
 #   ansible-inventory -i inventory.ini --graph                                    (inventory-lesson: the INI fixture)
 #   ansible --version, ansible-config dump --only-changed with ansible.cfg        (cfg-*: tools/fixtures/ansible-cfg.ini)
+#   ansible-doc <args>                                                            (doc-*, see the doc calls below)
 # ANSIBLE_FORKS=1 keeps host order deterministic (web1 before web2); default forks=5 races.
 # <name>-second is <name>.yml run a second time with no cleanup in between.
 # Needs: ansible-core 2.21.4 (the .venv, an active environment, or uv + python3.13 to make the .venv) and a writable /home/student (CI: sudo mkdir -p /home/student && sudo chown $USER /home/student).
@@ -88,6 +89,13 @@ for src in "$root"/tools/fixtures/inv-*.yml; do
   ansible-inventory -i inventory.yml --graph > "$out/$f.txt" 2>&1 < /dev/null
 done
 rm -f /home/student/inventory.yml
+# Modules lesson (doc-*): ansible-doc reads no inventory. Its stdout here is not a terminal, so it wraps at 79 columns, as in an
+# 80-column terminal (Display floors the width at 79); COLUMNS does not change it. -l without a collection is not captured: it
+# starts with a warning that holds the install path.
+doc() { f=$1; shift; ansible-doc "$@" > "$out/$f.txt" 2>&1 < /dev/null; }
+doc doc-snippet-ping -s ansible.builtin.ping
+doc doc-snippet-systemd-service -s ansible.builtin.systemd_service
+doc doc-list-builtin -l ansible.builtin
 cp "$root/tools/fixtures/inventory-lesson.ini" /home/student/inventory.ini
 ansible-inventory -i inventory.ini --graph > "$out/inventory-lesson.txt" 2>&1 < /dev/null
 rm -f /home/student/inventory.ini

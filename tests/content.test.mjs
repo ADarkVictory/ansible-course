@@ -82,18 +82,23 @@ test('every check uses only known keys', () => {
   }
 });
 
-test('command exercises have an inventory', () => {
-  for (const e of all.filter((e) => e.type === 'command')) assert.ok(e.inventory && typeof e.inventory === 'object', `${e.id}: needs an inventory`);
+test('command exercises have an inventory, except ansible-doc ones (it reads no inventory)', () => {
+  for (const e of all.filter((e) => e.type === 'command')) {
+    if (e.solution.startsWith('ansible-doc ')) assert.ok(!('inventory' in e), `${e.id}: ansible-doc reads no inventory`);
+    else assert.ok(e.inventory && typeof e.inventory === 'object', `${e.id}: needs an inventory`);
+  }
 });
 
 test('every output_golden names a file in tests/golden', () => {
   for (const e of all.filter((e) => 'output_golden' in e)) assert.ok(existsSync(new URL(`tests/golden/${e.output_golden}.txt`, root)), `${e.id}: no tests/golden/${e.output_golden}.txt`);
 });
 
+// fails: fqcn names the FQCN rule of an exercise with fqcn: true, which runs before the checks.
 test('every wrong entry has code and a valid 1-based fails', () => {
   for (const e of all.filter((e) => e.wrong)) {
     for (const w of e.wrong) {
       assert.ok(typeof w.code === 'string', `${e.id}: wrong entry needs code`);
+      if (w.fails === 'fqcn') { assert.equal(e.fqcn, true, `${e.id}: fails: fqcn needs fqcn: true`); continue; }
       assert.ok(Number.isInteger(w.fails) && w.fails >= 1 && w.fails <= (e.checks?.length ?? 0), `${e.id}: fails ${w.fails} is not an index into checks`);
     }
   }
@@ -105,6 +110,16 @@ test('every write and command solution passes all its checks', () => {
   for (const e of all.filter((e) => e.type !== 'choice')) {
     const r = run(e, e.solution);
     assert.ok(r.ok, `${e.id}: solution fails${r.failedCheck ? ` check ${r.failedCheck}` : ''}: ${r.hint ?? r.output}`);
+  }
+});
+
+// `right` (test-only, like `wrong`): other correct answers real Ansible and ansible-lint accept, which must pass too.
+test('every right entry passes all its checks', () => {
+  for (const e of all.filter((e) => e.right)) {
+    for (const code of e.right) {
+      const r = run(e, code);
+      assert.ok(r.ok, `${e.id}: right entry fails${r.failedCheck ? ` check ${r.failedCheck}` : ''}: ${r.hint ?? r.output}\n${code}`);
+    }
   }
 });
 

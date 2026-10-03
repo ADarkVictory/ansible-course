@@ -42,7 +42,7 @@ const fail = (output, hint, failedCheck) => ({ ok: false, output, ...(hint && { 
  * Decides whether a learner's playbook meets a `write` exercise (spec 3.3).
  * @param exercise { inventory, checks: [{ play | task | handler | forbid, has?, hint? }], fqcn?, fqcn_hint? }
  * @param opts     { second?: show the output of running the playbook again }
- * @returns { ok, output, hint?, failedCheck? } failedCheck is the 1-based index into exercise.checks.
+ * @returns { ok, output, hint?, failedCheck? } failedCheck is the 1-based index into exercise.checks, or 'fqcn'.
  */
 export function checkWrite(exercise, source, registry, keywords, opts = {}) {
   if (exercise.kind === 'inventory') return checkInventory(exercise, source);
@@ -63,7 +63,10 @@ export function checkWrite(exercise, source, registry, keywords, opts = {}) {
 
   const lists = (p) => [p.pre_tasks, p.tasks, p.post_tasks].flatMap((l) => l ?? []);
   const all = plays.flatMap((p) => [...lists(p), ...p.handlers]);
-  if (exercise.fqcn && all.some((t) => !t.action.includes('.'))) return fail(first, exercise.fqcn_hint ?? FQCN_HINT);
+  // As ansible-lint's fqcn[action-core]: a short name, or a runtime redirect such as ansible.builtin.yum (it names another module).
+  if (exercise.fqcn && all.some((t) => !t.action.includes('.') || registry.redirects?.[t.action])) {
+    return fail(first, exercise.fqcn_hint ?? FQCN_HINT, 'fqcn');
+  }
   const checks = exercise.checks ?? [];
   const i = checks.findIndex((c) => {
     if (c.play) return !plays.some((p) => has(p, c.play));
@@ -101,8 +104,8 @@ function same(a, want) {
 }
 
 // ---- Command and choice exercises ------------------------------------------------------------------------------------
-// ansible's options (`ansible --help`), as `long|alias|s` names: the first is the long name that `flags` uses. A trailing `=` takes a
-// value (`=+`: every occurrence is kept, otherwise the last wins), `*` counts occurrences. Long options are not abbreviated.
+// Each program's options (`<program> --help`), as `long|alias|s` names: the first is the long name that `flags` uses. A trailing `=`
+// takes a value (`=+`: every occurrence is kept, otherwise the last wins), `*` counts occurrences.
 const OPTIONS = [
   'become|b', 'become-method=', 'become-user=', 'ask-become-pass|K', 'become-password-file|become-pass-file=', 'inventory|inventory-file|i=+',
   'list-hosts', 'limit|l=', 'flush-cache', 'poll|P=', 'background|B=', 'one-line|o', 'tree|t=', 'private-key|key-file=', 'user|u=',
@@ -111,11 +114,18 @@ const OPTIONS = [
   'vault-password-file|vault-pass-file=+', 'forks|f=', 'module-path|M=+', 'playbook-dir=', 'task-timeout=', 'args|a=', 'module-name|m=',
   'verbose|v*', 'version', 'help|h',
 ];
-const BY_FLAG = new Map(OPTIONS.flatMap((spec) => {
+const DOC_OPTIONS = [
+  'help|h', 'version', 'verbose|v*', 'module-path|M=+', 'playbook-dir=', 'type|t=', 'json|j', 'roles-path|r=+', 'entry-point|e=',
+  'snippet|s', 'list_files|F', 'list|l', 'metadata-dump', 'no-fail-on-errors',
+];
+const byFlag = (specs) => new Map(specs.flatMap((spec) => {
   const [, names, kind] = /^([^=*]+)(.*)$/.exec(spec);
   const list = names.split('|');
   return list.map((n) => [n.length === 1 ? `-${n}` : `--${n}`, { name: list[0], kind }]);
 }));
+const PROGRAMS = { ansible: byFlag(OPTIONS), 'ansible-doc': byFlag(DOC_OPTIONS) };
+// ansible-doc's mutually exclusive options: it does one of these at a time.
+const DOC_MODES = ['entry-point', 'snippet', 'list_files', 'list', 'metadata-dump'];
 // Options that change what ansible prints (verbosity, prompts, check mode, ...) beyond what renderAdhoc shows; with one of them the
 // simulator shows no output of its own, only the exercise's `output` on success.
 const UNSIMULATED = new Set(['verbose', 'one-line', 'check', 'diff', 'tree', 'background', 'poll', 'ask-become-pass', 'ask-pass',
@@ -158,8 +168,9 @@ function shellTrap(line) {
   return undefined;
 }
 
-// argparse's reading of the words after `ansible`: { flags, pos } or { error } (a hint, in the course's words).
-function parseArgv(argv) {
+// argparse's reading of the words after the program: { flags, pos } or { error } (a hint, in the course's words).
+// A long option may be abbreviated to any prefix that matches only one option string, as argparse allows.
+function parseArgv(argv, options, program) {
   const flags = {}, pos = [];
   const looksLikeOption = (w) => w.length > 1 && w[0] === '-' && !/^-\d/.test(w) && !w.includes(' ');
   const set = ({ name, kind }, value) => {
@@ -175,8 +186,10 @@ function parseArgv(argv) {
     for (let j = w.startsWith('--') ? 0 : 1; j < w.length; j++) {
       const eq = w.indexOf('=');
       const flag = j === 0 ? (eq < 0 ? w : w.slice(0, eq)) : `-${w[j]}`;
-      const opt = BY_FLAG.get(flag);
-      if (!opt) return { error: `ansible does not know the option ${flag}.` };
+      const prefixed = j === 0 && !options.has(flag) ? [...options.keys()].filter((k) => k.startsWith(flag) && k.startsWith('--')) : [];
+      if (prefixed.length > 1) return { error: `${flag} is ambiguous: ${prefixed.join(', ')}.` };
+      const opt = options.get(prefixed[0] ?? flag);
+      if (!opt) return { error: `${program} does not know the option ${flag}.` };
       if (!opt.kind || opt.kind === '*') {
         if (j === 0 && eq >= 0) return { error: `${flag} does not take a value.` };
         set(opt);
@@ -190,8 +203,6 @@ function parseArgv(argv) {
       break;
     }
   }
-  if (!pos.length) return { error: 'ansible needs a host pattern, for example: ansible web -m ping' };
-  if (pos.length > 1) return { error: 'ansible takes one host pattern; quote it if it contains spaces or special characters.' };
   return { flags, pos };
 }
 
@@ -202,7 +213,9 @@ function parseArgv(argv) {
  *   when there is no -m), args the canonical parameters of -a, flags the other options by long name (true, a string, an array for
  *   options that repeat, a count for -v);
  *   plus what renderAdhoc prints from: mod (-m as typed), known, typedArgs (-a as typed), noArg, rawParams, unsupported.
- *   Only `ansible` lines are read; other programs arrive with the lessons that need their output.
+ *   ansible-doc lines: { program, pattern, module, flags }: pattern is the plugin names (or the -l filter) as typed, module the one
+ *   module named, resolved as ansible-doc resolves it (it does not follow runtime redirects: `ansible-doc yum` finds nothing).
+ *   Other programs arrive with the lessons that need them.
  */
 export function parseCommand(line, registry) {
   if (CURLY.test(line)) return { hint: CURLY_HINT };
@@ -213,9 +226,19 @@ export function parseCommand(line, registry) {
   const trap = shellTrap(String(line));
   if (trap) return { hint: trap };
   const [program, ...argv] = words;
-  if (program !== 'ansible') return { program, hint: `"${program}" is not part of this exercise; use the ansible command.` };
-  const { flags, pos, error } = parseArgv(argv);
+  if (!PROGRAMS[program]) return { program, hint: `"${program}" is not part of this exercise; use the ansible or ansible-doc command.` };
+  const { flags, pos, error } = parseArgv(argv, PROGRAMS[program], program);
   if (error) return { program, hint: error };
+  if (program === 'ansible-doc') {
+    // ponytail: -t values and -j are not validated; checks that pass with an extra -j still show the exercise's plain-text golden.
+    const modes = DOC_MODES.filter((m) => m in flags);
+    if (modes.length > 1) return { program, hint: `ansible-doc does one at a time: --${modes.join(' or --')}.` };
+    const name = pos.length === 1 && (flags.type ?? 'module') === 'module'
+      ? fqcn(pos[0]).replace(/^ansible\.legacy\./, 'ansible.builtin.') : undefined;
+    return { program, pattern: pos.join(' ') || undefined, module: name && (registry.twins?.[name] ?? name), flags };
+  }
+  if (!pos.length) return { program, hint: 'ansible needs a host pattern, for example: ansible web -m ping' };
+  if (pos.length > 1) return { program, hint: 'ansible takes one host pattern; quote it if it contains spaces or special characters.' };
   const { 'module-name': mod = 'command', args: text = '', ...rest } = flags;
   const { module, spec, real, twin, tombstone } = lookup(mod, registry);
   if (real && !spec && !tombstone) return { program, hint: notSimulated(mod) };
@@ -237,16 +260,19 @@ export function parseCommand(line, registry) {
 
 /**
  * Decides whether a learner's command meets a `command` exercise.
- * @param exercise { inventory, checks: [{ program?, pattern?, hosts?, module?, args?, flags?, hint? }], stdout?, output? }
+ * @param exercise { inventory?, checks: [{ program?, pattern?, hosts?, module?, args?, flags?, hint? }], stdout?, output? }
  *                 a check passes when every key it names matches (args and flags: the keys it names; hosts: the hosts the pattern
  *                 and --limit select, in any order, so 'prod:&web' meets a check written for 'web:&prod'); `stdout` is what a command
  *                 or shell module prints; `output` replaces the generated output on success (modules the simulator cannot run).
+ *                 ansible-doc prints only `output` (a captured golden), and only on success.
  * @returns { ok, output, hint?, failedCheck? } failedCheck is the 1-based index into exercise.checks.
  */
 export function checkCommand(exercise, line, registry) {
   const cmd = parseCommand(line, registry);
   if (cmd.hint) return fail('', cmd.hint);
-  const shown = Object.keys(cmd.flags).some((f) => UNSIMULATED.has(f)) ? '' : renderAdhoc(cmd, exercise.inventory, { stdout: exercise.stdout });
+  // No inventory: an ansible-doc exercise, where an ansible line has no hosts to run on.
+  const shown = cmd.program === 'ansible-doc' || !exercise.inventory || Object.keys(cmd.flags).some((f) => UNSIMULATED.has(f)) ? ''
+    : renderAdhoc(cmd, exercise.inventory, { stdout: exercise.stdout });
   // A command real Ansible stops on is never correct, and a check's hint would only mislead: the learner needs that error first.
   if (/^\[ERROR\]: /m.test(shown)) return fail(shown);
   const checks = exercise.checks ?? [];
@@ -259,7 +285,7 @@ export function checkCommand(exercise, line, registry) {
     if (bad) throw new Error(`unknown check ${bad} in exercise ${exercise.id}: ${JSON.stringify(c)}`);
     return !((c.program ?? cmd.program) === cmd.program && (c.pattern ?? cmd.pattern) === cmd.pattern
       && (!c.hosts || [...c.hosts].sort().join() === targets().sort().join())
-      && canonical(c.module ?? cmd.module) === cmd.module && has(cmd.args, c.args) && has(cmd.flags, c.flags));
+      && (c.module === undefined || canonical(c.module) === cmd.module) && has(cmd.args ?? {}, c.args) && has(cmd.flags, c.flags));
   });
   // The exercise's stdout is what the expected command prints; for any other command or shell line the real output is unknown.
   if (i >= 0) return fail(/^ansible\.builtin\.(command|shell)$/.test(cmd.module) ? '' : shown, checks[i].hint, i + 1);

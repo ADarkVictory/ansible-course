@@ -148,7 +148,7 @@ test('fqcn: true rejects copy: with the built-in hint, or the exercise own', () 
   const src = (m) => play('  tasks:', `    - ${m}: { src: a, dest: b }`);
   const bad = check(ex, src('copy'));
   assert.deepEqual([bad.ok, bad.hint], [false, 'Use the fully qualified collection name, e.g. ansible.builtin.copy.']);
-  assert.equal(bad.failedCheck, undefined);
+  assert.equal(bad.failedCheck, 'fqcn'); // wrong entries name it as fails: fqcn
   assert.match(bad.output, /TASK \[copy\]/);
   assert.equal(check(ex, src('ansible.builtin.copy')).ok, true);
   assert.equal(check({ ...ex, fqcn_hint: 'Spell it out.' }, src('copy')).hint, 'Spell it out.');
@@ -157,6 +157,14 @@ test('fqcn: true rejects copy: with the built-in hint, or the exercise own', () 
   // handlers count
   const h = check(ex, play('  tasks:', '    - ansible.builtin.copy: { src: a, dest: b }', '      notify: h', '  handlers:', '    - name: h', '      debug: msg=x'));
   assert.deepEqual([h.ok, h.hint], [false, 'Use the fully qualified collection name, e.g. ansible.builtin.copy.']);
+});
+
+test('fqcn: true, as ansible-lint fqcn[action-core]: a redirect (ansible.builtin.yum) is not the module name; a real alias (systemd) is', () => {
+  const ex = one([{ task: { module: 'dnf' }, hint: 'h' }], { fqcn: true });
+  const src = (m) => play('  tasks:', `    - ${m}: { name: nginx }`);
+  assert.deepEqual([check(ex, src('ansible.builtin.yum')).ok, check(ex, src('ansible.builtin.yum')).failedCheck], [false, 'fqcn']);
+  assert.equal(check(ex, src('ansible.builtin.dnf')).ok, true);
+  assert.equal(check(one([{ task: { module: 'systemd_service' }, hint: 'h' }], { fqcn: true }), src('ansible.builtin.systemd')).ok, true);
 });
 
 // ---- parse errors and curly quotes ----------------------------------------------------------------------------

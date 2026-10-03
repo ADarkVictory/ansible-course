@@ -274,3 +274,58 @@ test('the ad-hoc lesson: the engine prints what real ansible printed over its in
     ['adhoc-lesson-limit', 'ansible web -m ping --limit staging'],
   ]) assert.equal(checkCommand({ id: 'x', type: 'command', inventory, stdout }, line, registry).output, golden(stem), stem);
 });
+
+// ansible-doc (lesson 05): checks over program, the plugin name and options; its output is only ever a captured golden (output_golden).
+const doc = (line, checks = [], extra = {}) => checkCommand({ id: 'x', type: 'command', checks, ...extra }, line, registry);
+const snippet = [{ program: 'ansible-doc', module: 'systemd_service', flags: { snippet: true }, hint: 'Show the snippet.' }];
+
+test('ansible-doc: the plugin name resolves as ansible-doc resolves it (short, FQCN, ansible.legacy, the systemd twin); options by long name', () => {
+  for (const line of ['ansible-doc -s systemd_service', 'ansible-doc --snippet ansible.builtin.systemd_service', 'ansible-doc ansible.builtin.systemd -s',
+    'ansible-doc -s ansible.legacy.systemd_service', 'ansible-doc -s systemd', 'ansible-doc --snip systemd_service', 'ansible-doc -t module -s systemd_service']) {
+    assert.deepEqual(doc(line, snippet, { output: 'snippet\n' }), { ok: true, output: 'snippet\n' }, line);
+  }
+  const c = parseCommand('ansible-doc -s ansible.builtin.dnf -v', registry);
+  assert.deepEqual([c.program, c.module, c.pattern, c.flags], ['ansible-doc', 'ansible.builtin.dnf', 'ansible.builtin.dnf', { snippet: true, verbose: 1 }]);
+});
+
+test('ansible-doc: yum is not dnf (real ansible-doc prints "yum was not found"); another plugin type is not the module', () => {
+  const dnf = [{ program: 'ansible-doc', module: 'dnf', hint: 'Look up dnf.' }];
+  for (const line of ['ansible-doc -s yum', 'ansible-doc -s ansible.builtin.yum', 'ansible-doc -t lookup -s dnf', 'ansible-doc -s dnf ping', 'ansible-doc -s']) {
+    assert.deepEqual(doc(line, dnf, { output: 'x' }), { ok: false, output: '', hint: 'Look up dnf.', failedCheck: 1 }, line);
+  }
+});
+
+test('ansible-doc -l: the collection filter is the pattern; a failed check shows no output', () => {
+  const list = [{ program: 'ansible-doc', flags: { list: true }, hint: 'List them.' }, { pattern: 'ansible.builtin', hint: 'Only ansible.builtin.' }];
+  assert.deepEqual(doc('ansible-doc -l ansible.builtin', list, { output: 'list\n' }), { ok: true, output: 'list\n' });
+  assert.equal(doc('ansible-doc --list ansible.builtin', list).ok, true);
+  assert.equal(doc('ansible-doc -l', list, { output: 'list\n' }).failedCheck, 2);
+  assert.equal(doc('ansible-doc -l builtin', list).failedCheck, 2);
+  assert.deepEqual(doc('ansible-doc -s ansible.builtin', list, { output: 'list\n' }), { ok: false, output: '', hint: 'List them.', failedCheck: 1 });
+});
+
+test('ansible-doc: options it rejects give a hint and no output', () => {
+  for (const [line, hint] of [
+    ['ansible-doc -s -l ansible.builtin', /one at a time/],
+    ['ansible-doc -sl ping', /one at a time/],
+    ['ansible-doc -m ping', /ansible-doc does not know the option -m/],
+    ['ansible-doc --li ansible.builtin', /--li is ambiguous/], // --list or --list_files
+    ['ansible-doc -t', /-t needs a value/],
+  ]) {
+    const r = doc(line, snippet, { output: 'x' });
+    assert.deepEqual([r.ok, r.output, r.failedCheck], [false, '', undefined], line);
+    assert.match(r.hint, hint, line);
+  }
+});
+
+test('long options abbreviate as in argparse: a unique prefix is the option, an ambiguous one is an error', () => {
+  assert.deepEqual(parseCommand('ansible web --list-ho --lim=web1', registry).flags, { 'list-hosts': true, limit: 'web1' });
+  assert.match(parseCommand('ansible web --mod=ping', registry).hint, /--mod is ambiguous: --module-path, --module-name/);
+  assert.match(parseCommand('ansible web --inv x -m ping', registry).hint, /--inv is ambiguous/); // --inventory and its alias --inventory-file
+});
+
+test('an ansible line in an exercise with no inventory (an ansible-doc exercise) runs nothing: the program check fails, no output', () => {
+  for (const line of ['ansible web -m ping', 'ansible all -m systemd_service -a name=nginx']) {
+    assert.deepEqual(doc(line, snippet, { output: 'x' }), { ok: false, output: '', hint: 'Show the snippet.', failedCheck: 1 }, line);
+  }
+});
